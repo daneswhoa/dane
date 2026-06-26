@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: landlord-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: landlord_user
+      POSTGRES_PASSWORD: landlord_password
+      POSTGRES_DB: landlord_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U landlord_user -d landlord_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: landlord-api
+    restart: always
+    ports:
+      - "4000:4000"
+    environment:
+      - DATABASE_URL=postgresql://landlord_user:landlord_password@db:5432/landlord_dev
+      - PORT=4000
+      - BETTER_AUTH_SECRET=local_secret_session_key_12345
+      - BETTER_AUTH_URL=http://localhost:4000
+      - NEXT_PUBLIC_API_URL=http://localhost:4000
+      - NEXT_PUBLIC_APP_URL=http://localhost:3000
+      - NEXT_PUBLIC_PORTAL_URL=http://localhost:3001
+      # Copy other environment variables from your root .env if needed
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  postgres_data:

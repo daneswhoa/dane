@@ -1,0 +1,27 @@
+node_modules/
+dist/
+.next/
+.turbo/
+*.tsbuildinfo
+.env
+.env.*
+*.env
+!.env.example
+
+# Service accounts, secrets, and private key JSON files
+secrets/
+**/secrets/**
+*-service-account*.json
+*service-account*.json
+*credentials*.json
+gcp-service-account.json
+landlordhungary-*.json
+*.pem
+*.key
+
+# Local test outputs and coverages
+coverage/
+*.local
+scratch_query.js
+test-db.js
+teamtab.txt

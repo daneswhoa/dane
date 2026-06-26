@@ -1,0 +1,8 @@
+@import '@repo/ui/tokens.css';
+@import '@repo/ui/base.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Mod-specific styles go here */

@@ -8,31 +8,42 @@ export function FetchInterceptor() {
       const originalFetch = window.fetch;
       window.fetch = function (input, init) {
         let updatedInput = input;
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://api-production-2a04.up.railway.app';
         
-        // Define base search pattern
-        const searchPattern = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-        
-        if (typeof input === 'string' && input.startsWith(searchPattern)) {
-          updatedInput = input.replace(searchPattern, apiUrl);
-        } else if (input instanceof URL && input.href.startsWith(searchPattern)) {
-          updatedInput = new URL(input.href.replace(searchPattern, apiUrl));
-        } else if (input && typeof input === 'object' && 'url' in input && typeof (input as any).url === 'string' && (input as any).url.startsWith(searchPattern)) {
-          const newUrl = (input as any).url.replace(searchPattern, apiUrl);
+        const localPattern = 'http://localhost:4000';
+        const absolutePattern = process.env.NEXT_PUBLIC_API_URL || 'https://api-production-2a04.up.railway.app';
+        const targetOrigin = window.location.origin;
+
+        const rewriteUrl = (urlStr: string) => {
+          if (urlStr.startsWith(localPattern)) {
+            return urlStr.replace(localPattern, targetOrigin);
+          }
+          if (urlStr.startsWith(absolutePattern)) {
+            return urlStr.replace(absolutePattern, targetOrigin);
+          }
+          return urlStr;
+        };
+
+        if (typeof input === 'string') {
+          updatedInput = rewriteUrl(input);
+        } else if (input instanceof URL) {
+          updatedInput = new URL(rewriteUrl(input.href));
+        } else if (input && typeof input === 'object' && 'url' in input && typeof (input as any).url === 'string') {
+          const newUrl = rewriteUrl((input as any).url);
           updatedInput = new Request(newUrl, input as any);
         }
 
-        // Check if this request goes to our API
+        // Force credentials: 'include' for all requests going to our origin /api
         let isApiRequest = false;
-        if (typeof updatedInput === 'string' && updatedInput.startsWith(apiUrl)) {
-          isApiRequest = true;
-        } else if (updatedInput instanceof URL && updatedInput.href.startsWith(apiUrl)) {
-          isApiRequest = true;
-        } else if (updatedInput && typeof updatedInput === 'object' && 'url' in updatedInput && typeof (updatedInput as any).url === 'string' && (updatedInput as any).url.startsWith(apiUrl)) {
+        const checkUrl = typeof updatedInput === 'string' 
+          ? updatedInput 
+          : updatedInput instanceof URL 
+            ? updatedInput.href 
+            : (updatedInput as any)?.url || '';
+
+        if (checkUrl.startsWith(targetOrigin + '/api') || checkUrl.startsWith('/api')) {
           isApiRequest = true;
         }
 
-        // If it is a request to the NestJS API, force credentials: 'include'
         if (isApiRequest) {
           init = init || {};
           init.credentials = 'include';

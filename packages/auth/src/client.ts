@@ -2,8 +2,8 @@ import { createAuthClient } from 'better-auth/react';
 import { emailOTPClient } from 'better-auth/client/plugins';
 
 const apiUrl = typeof window !== 'undefined'
-  ? (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000')
-  : 'http://localhost:4000';
+  ? window.location.origin
+  : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000');
 
 export const authClient = createAuthClient({
   baseURL: apiUrl,

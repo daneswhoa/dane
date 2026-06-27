@@ -228,7 +228,8 @@ export default function SophiaTab() {
 
   // Connect to WebSockets events gateway
   useEffect(() => {
-    const socketClient = io('http://localhost:4000/events', {
+    const socketUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000') + '/events';
+    const socketClient = io(socketUrl, {
       withCredentials: true,
       transports: ['websocket'],
     });

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
+import { FetchInterceptor } from './components/FetchInterceptor';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -20,6 +21,7 @@ export default function RootLayout({
   return (
     <html lang="en" data-theme="dark">
       <body className={inter.variable}>
+        <FetchInterceptor />
         {children}
       </body>
     </html>

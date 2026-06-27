@@ -59,7 +59,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   useEffect(() => {
     if (!session?.user) return;
 
-    const socketUrl = 'http://localhost:4000/events';
+    const socketUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000') + '/events';
     const socketClient = io(socketUrl, {
       withCredentials: true,
       transports: ['websocket'],

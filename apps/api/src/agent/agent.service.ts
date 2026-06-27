@@ -46,11 +46,40 @@ export class AgentService {
 Your personality is helpful, warm, polite, and female. You speak directly to the property manager/user as a professional colleague.
 Always keep messages completely free of marketing fluff and industrial jargon (e.g. use simple labels like "Note", "Ticket", "Plumber", "Status", "Sending...").
 
-CRITICAL TOOL USAGE RULES:
-1. NEVER guess, assume, or hallucinate properties, property counts, unit details, or names (e.g. "Sunset Apartments", "Maple Lofts", "Harbor Condos", "Mau's Appartmen").
-2. To check what properties the user manages or owns, you MUST call the 'get_properties' tool. Never answer without running 'get_properties' first if the query is about their properties list.
-3. To check portfolio metrics (number of vacant/occupied units, rents, deposits, etc.), you MUST call the 'get_portfolio_summary' tool.
-4. If a tool execution fails, tell the user the tool failed and guide them on how to navigate manually using the guide below.
+## MANDATORY TOOL USAGE — READ THIS CAREFULLY
+
+You have ZERO knowledge about this user's data. You do NOT know their properties, tenants, units, invoices, tickets, finances, or any other records. ALL of that lives in the database and can ONLY be accessed through your tools.
+
+**If the user asks ANYTHING about the following topics, you MUST call the appropriate tool BEFORE responding. Do NOT answer from memory or guess. Your answer WILL be wrong if you skip the tool call.**
+
+| Topic | Required Tool(s) |
+|---|---|
+| Properties, buildings, addresses | get_properties |
+| How many properties, units, vacancies | get_portfolio_summary |
+| Tenants, residents, who lives where | filter_records (dataset: tenants) |
+| Invoices, payments, what's owed | get_invoices or filter_records (dataset: invoices) |
+| Maintenance tickets, repairs, jobs | filter_records (dataset: tickets) or check_job_status |
+| Contractors, specialists | find_contractors |
+| Revenue, expenses, profit, finances | view_company_finances |
+| Notifications, alerts | get_notifications |
+| Audit history, activity logs | filter_records (dataset: audits) |
+
+**NEVER do any of the following:**
+- Say "you have X properties" without calling get_properties first.
+- Say "your occupancy rate is X%" without calling get_portfolio_summary first.
+- Mention ANY property name, tenant name, unit label, or dollar amount without tool data backing it.
+- Describe the user's portfolio, arrears, or finances from your own knowledge — you have none.
+- Give a summary or overview of the user's data without running the relevant tool(s) first.
+
+**When a question requires multiple data points**, call ALL needed tools. For example, if asked "give me an overview of my portfolio," you need BOTH get_properties AND get_portfolio_summary. If asked about finances and arrears, call view_company_finances AND get_portfolio_summary.
+
+**You may answer WITHOUT tools only for:**
+- General advice, how-to questions, or explanations about the platform.
+- Navigation instructions (use the guide below).
+- Greetings, small talk, or clarification questions.
+- Math calculations (use calculate_formula).
+
+If a tool execution fails, tell the user the tool failed and guide them on how to navigate manually using the guide below.
 
 Dashboard Navigation & Structural Guide:
 Use this directory guide to instruct users how to navigate manually if a tool fails or if they ask for instructions:
@@ -76,12 +105,12 @@ Use this directory guide to instruct users how to navigate manually if a tool fa
 9. **Team / Organization ('/team')**: Setup org name, upload corporate logo, configure coworker permissions.
 
 Your Core Priorities:
-1. **Prioritize Cost-Saving**: When assigning contractors to tickets, search for the cheapest options, lowball contractor rates by proposing a negotiated lower price (e.g. 15-20% discount on their standard rate), and bookmark preferred contractors in the marketplace.
-2. **Negligence Billing**: If a maintenance ticket describes damage caused by tenant mistakes or ridiculous requests (e.g. clogged toilet from toys, broken glass from playing ball, lost keys), charge them directly using the 'create_tenant_invoice' tool.
+1. **Cost Comparison**: When assigning contractors to tickets, search for available options sorted by rate and present the choices to the user. Let the manager decide the final rate and contractor.
+2. **Damage Assessment**: If a maintenance ticket describes damage that may have been caused by tenant negligence, flag it to the property manager for review. Do NOT automatically create invoices for suspected negligence — always ask the manager for approval first.
 3. **Ask Before Redirecting**: You must ALWAYS ask the user for permission before triggering a navigation page redirect (e.g., "Would you like me to take you to the setup workspace?").
-4. **Escalate Recurrent Issues**: If a tool fails or you hit errors repeatedly, log the error. If you notice a recurrent issue, notify the manager by saying "I have escalated the error," and email the developer (mark.mainac@gmail.com).
+4. **Escalate Recurrent Issues**: If a tool fails or you hit errors repeatedly, log the error. If you notice a recurrent issue, notify the manager by saying "I have escalated the error," and send an escalation email using the 'send_escalation_email' tool.
 5. **Enforce Permissions**: If you hit a permission issue or a tool reports that the user is unauthorized, state clearly: "You do not have permission to do that action."
-6. **Tenant Move and Rent Adjustments**: You can move tenants using the 'move_tenant' tool, adjust portfolio rent programmatically (e.g., in response to market research or optimization requests) using the 'adjust_portfolio_rent' tool, modify property names using 'update_property_details', and mark units as vacant using 'mark_unit_vacant'. Always explain your calculations and adjustments clearly to the user.
+6. **Tenant Move and Rent Adjustments**: You can move tenants using the 'move_tenant' tool, adjust portfolio rent programmatically using the 'adjust_portfolio_rent' tool, modify property names using 'update_property_details', and mark units as vacant using 'mark_unit_vacant'. Always explain your calculations and adjustments clearly to the user.
 
 
 Recent User Browser Navigation Logs (LocalStorage):
@@ -147,47 +176,58 @@ Remember to enforce security implicitly. Do not attempt to run tools outside of 
 
     while (true) {
       const { done, value } = await reader.read();
-      if (done) break;
+      buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
 
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
+      let boundaryIndex;
+      while ((boundaryIndex = buffer.indexOf('\n\n')) !== -1) {
+        const message = buffer.substring(0, boundaryIndex).trim();
+        buffer = buffer.substring(boundaryIndex + 2);
+        if (!message) continue;
 
-      for (const line of lines) {
-        const cleaned = line.trim();
-        if (!cleaned) continue;
-        if (cleaned === 'data: [DONE]') continue;
-        if (cleaned.startsWith('data: ')) {
-          try {
-            const parsed = JSON.parse(cleaned.substring(6));
-            const choice = parsed.choices[0];
-            const delta = choice?.delta;
-            
-            if (!delta) continue;
-
-            if (delta.content) {
-              textResult += delta.content;
-              client.emit('sophia-token', { text: delta.content });
-            }
-
-            if (delta.tool_calls) {
-              for (const tc of delta.tool_calls) {
-                const idx = tc.index;
-                if (!toolCallsMap.has(idx)) {
-                  toolCallsMap.set(idx, { id: tc.id || '', name: tc.function?.name || '', arguments: '' });
-                }
-                const activeTc = toolCallsMap.get(idx)!;
-                if (tc.id) activeTc.id = tc.id;
-                if (tc.function?.name) activeTc.name = tc.function.name;
-                if (tc.function?.arguments) {
-                  activeTc.arguments += tc.function.arguments;
-                }
-              }
-            }
-          } catch (e) {
-            // Silence JSON parsing errors
+        const lines = message.split(/\r?\n/);
+        let dataContent = '';
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            dataContent += (dataContent ? '\n' : '') + line.substring(6);
           }
         }
+
+        const cleaned = dataContent.trim();
+        if (!cleaned || cleaned === '[DONE]') continue;
+
+        try {
+          const parsed = JSON.parse(cleaned);
+          const choice = parsed.choices[0];
+          const delta = choice?.delta;
+          
+          if (!delta) continue;
+
+          if (delta.content) {
+            textResult += delta.content;
+            client.emit('sophia-token', { text: delta.content });
+          }
+
+          if (delta.tool_calls) {
+            for (const tc of delta.tool_calls) {
+              const idx = tc.index;
+              if (!toolCallsMap.has(idx)) {
+                toolCallsMap.set(idx, { id: tc.id || '', name: tc.function?.name || '', arguments: '' });
+              }
+              const activeTc = toolCallsMap.get(idx)!;
+              if (tc.id) activeTc.id = tc.id;
+              if (tc.function?.name) activeTc.name = tc.function.name;
+              if (tc.function?.arguments) {
+                activeTc.arguments += tc.function.arguments;
+              }
+            }
+          }
+        } catch (e) {
+          // Quietly ignore JSON parse issues from malformed delta boundaries
+        }
+      }
+
+      if (done) {
+        break;
       }
     }
 
@@ -328,11 +368,19 @@ Remember to enforce security implicitly. Do not attempt to run tools outside of 
           nextSuccessCount++;
           client.emit('sophia-action-end', { id: actionId, status: 'completed' });
 
+          // Truncate large tool outputs to prevent context window inflation
+          let toolOutputStr = JSON.stringify(toolOutput);
+          const MAX_TOOL_OUTPUT = 4000;
+          if (toolOutputStr.length > MAX_TOOL_OUTPUT) {
+            const truncated = toolOutputStr.substring(0, MAX_TOOL_OUTPUT);
+            toolOutputStr = truncated + `... [TRUNCATED — ${toolOutputStr.length - MAX_TOOL_OUTPUT} chars omitted. Summarize what you have.]`;
+          }
+
           messages.push({
             role: 'tool',
             name: tc.name,
             tool_call_id: tc.id,
-            content: JSON.stringify(toolOutput)
+            content: toolOutputStr
           });
 
           if (tc.name === 'get_portfolio_summary') {
@@ -398,6 +446,27 @@ Remember to enforce security implicitly. Do not attempt to run tools outside of 
       await this.runAgentLoop(messages, context, client, round + 1, nextSuccessCount, nextFailureCount, conversationId);
 
     } else {
+      // Hallucination guard: if this is round 1 and the model answered with
+      // data-sounding content without calling any tools, it's likely guessing.
+      // Force a retry with a correction prompt (only once).
+      if (round === 1 && textResult && this.looksLikeDataClaim(textResult)) {
+        this.logger.warn('Hallucination guard triggered — model responded with data claims without calling tools. Forcing retry.');
+        // Remove the streamed text from the client by sending a reset
+        client.emit('sophia-token-reset', {});
+        
+        messages.push({
+          role: 'assistant',
+          content: textResult,
+        });
+        messages.push({
+          role: 'user',
+          content: '[SYSTEM CORRECTION] Your previous response contained data claims without calling any tools. You do NOT have access to user data from memory. You MUST call the appropriate tools (get_properties, get_portfolio_summary, filter_records, get_invoices, view_company_finances, etc.) before answering questions about properties, tenants, units, finances, tickets, or any other records. Try again and call the right tools this time.',
+        });
+
+        await this.runAgentLoop(messages, context, client, round + 1, successCount, failureCount, conversationId);
+        return;
+      }
+
       if (textResult) {
         messages.push({ role: 'assistant', content: textResult });
       }
@@ -421,5 +490,42 @@ Remember to enforce security implicitly. Do not attempt to run tools outside of 
     if (client && savedId && savedId !== conversationId) {
       client.emit('sophia-thread-sync', { conversationId: savedId });
     }
+  }
+
+  /**
+   * Detects if a model response contains data-sounding claims that
+   * would require tool calls to verify. Used by the hallucination guard.
+   */
+  private looksLikeDataClaim(text: string): boolean {
+    const lower = text.toLowerCase();
+
+    // Data-indicator patterns: dollar amounts, percentages, specific counts
+    const dataPatterns = [
+      /\$[\d,]+/,                         // Dollar amounts like $1,200
+      /€[\d,]+/,                          // Euro amounts
+      /\d+\s*%/,                           // Percentages like 85%
+      /\byou have \d+/i,                   // "you have 3 properties"
+      /\bthere are \d+/i,                  // "there are 5 units"
+      /\byour (total|current|outstanding)/i, // "your total arrears"
+      /\byour (properties|tenants|units|invoices|tickets|revenue|income|expenses)/i,
+      /\boccupancy rate/i,
+      /\bnet operating/i,
+      /\bcollected .*(rent|revenue)/i,
+    ];
+
+    for (const pattern of dataPatterns) {
+      if (pattern.test(text)) {
+        return true;
+      }
+    }
+
+    // Check for fabricated property names (capitalized multi-word phrases
+    // that look like building names, e.g. "Sunset Apartments")
+    const buildingNamePattern = /\b[A-Z][a-z]+\s+(Apartments?|Condos?|Lofts?|Villas?|Towers?|Residences?|Complex|Estate|Manor|Gardens?|Heights?|Place|Court|Plaza)\b/;
+    if (buildingNamePattern.test(text)) {
+      return true;
+    }
+
+    return false;
   }
 }

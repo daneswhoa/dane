@@ -130,7 +130,7 @@ export default function PropertiesTab() {
       });
       
       try {
-        const res = await fetch('http://localhost:4000/api/dashboard/properties', { credentials: 'include' });
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/properties`, { credentials: 'include' });
         if (res.ok) {
           const data = await res.json();
           if (Array.isArray(data)) {

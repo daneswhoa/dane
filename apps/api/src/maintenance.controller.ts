@@ -254,7 +254,7 @@ export class MaintenanceController {
         updateData.contractorMessage = body.contractorMessage;
       }
       if (body.scheduledAt !== undefined) {
-        updateData.scheduledAt = body.scheduledAt;
+        updateData.scheduledAt = body.scheduledAt ? new Date(body.scheduledAt) : null;
       }
       if (body.quoteAmount !== undefined) {
         updateData.quoteAmount = body.quoteAmount;

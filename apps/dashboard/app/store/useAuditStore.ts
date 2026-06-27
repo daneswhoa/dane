@@ -108,7 +108,7 @@ export const useAuditStore = create<AuditStore>((set, get) => ({
       if (search) params.append('search', search);
       if (severity && severity !== 'All') params.append('severity', severity);
 
-      const res = await fetch(`http://localhost:4000/api/dashboard/security/audit-logs?${params.toString()}`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/security/audit-logs?${params.toString()}`, {
         credentials: 'include',
       });
       if (res.ok) {
@@ -199,7 +199,7 @@ export const useAuditStore = create<AuditStore>((set, get) => ({
 
     // 3. Post to backend
     try {
-      const res = await fetch('http://localhost:4000/api/dashboard/security/audit-logs', {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/security/audit-logs`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },

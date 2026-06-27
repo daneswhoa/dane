@@ -9,6 +9,8 @@ import Step2Fees from './components/Step2Fees';
 import Step3Settings from './components/Step3Settings';
 import SuccessScreen from './components/SuccessScreen';
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}`;
+
 export default function PropertySetupPage() {
   const params = useParams();
   const propertyId = params.propertyId as string;
@@ -31,7 +33,7 @@ export default function PropertySetupPage() {
   useEffect(() => {
     async function loadData() {
       try {
-        const propRes = await fetch(`http://localhost:4000/api/dashboard/properties/${propertyId}`, { credentials: 'include' });
+        const propRes = await fetch(`${API_URL}/api/dashboard/properties/${propertyId}`, { credentials: 'include' });
         if (!propRes.ok) throw new Error('Failed to load property details.');
         const propData = await propRes.json();
         setProperty(propData.property);
@@ -50,7 +52,7 @@ export default function PropertySetupPage() {
           setSetupMode('excel');
         }
 
-        const teamRes = await fetch('http://localhost:4000/api/dashboard/team', { credentials: 'include' });
+        const teamRes = await fetch(`${API_URL}/api/dashboard/team`, { credentials: 'include' });
         if (teamRes.ok) {
           const teamData = await teamRes.json();
           setTeamMembers(teamData.members || []);
@@ -81,7 +83,7 @@ export default function PropertySetupPage() {
     setIsSaving(true);
     setError('');
     try {
-      const res = await fetch(`http://localhost:4000/api/dashboard/properties/${propertyId}/setup`, {
+      const res = await fetch(`${API_URL}/api/dashboard/properties/${propertyId}/setup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ units, feeSettings, propertySettings, teamAccess: selectedTeam }),

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { X, Loader2, Check } from 'lucide-react';
 import { MaintenanceJob } from '../types';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}`;
 
 interface InvoiceModalProps {
   job: MaintenanceJob;

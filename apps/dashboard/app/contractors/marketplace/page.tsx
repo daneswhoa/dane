@@ -77,7 +77,7 @@ export default function ContractorsMarketplacePage() {
     setLoading(true);
     setError('');
     try {
-      const cRes = await fetch('http://localhost:4000/api/dashboard/contractors', {
+      const cRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/contractors`, {
         credentials: 'include',
       });
       if (!cRes.ok) throw new Error('Failed to load contractors registry');
@@ -85,7 +85,7 @@ export default function ContractorsMarketplacePage() {
       setContractors(cData);
 
       // Load tickets for assignment dropdown
-      const tRes = await fetch('http://localhost:4000/api/dashboard/maintenance', {
+      const tRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/maintenance`, {
         credentials: 'include',
       });
       if (tRes.ok) {
@@ -117,7 +117,7 @@ export default function ContractorsMarketplacePage() {
     setAssignSuccess('');
 
     try {
-      const res = await fetch(`http://localhost:4000/api/dashboard/maintenance/${ticketId}/assign`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/maintenance/${ticketId}/assign`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },

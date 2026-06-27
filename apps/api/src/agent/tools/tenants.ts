@@ -171,7 +171,7 @@ export async function createTenantInvoiceImpl(
   params: { tenantId: string; propertyId: string; amount: number; description: string; type?: string; dueDateDays?: number }
 ) {
   await service.logActivity(context.userId, 'create_tenant_invoice', `Billing tenant ${params.tenantId} amount: ${params.amount}`);
-  await service.checkPropertyAccess(params.propertyId, context);
+  const ownerId = await service.checkPropertyAccess(params.propertyId, context);
 
   const tenantList = await service.db
     .select()
@@ -197,7 +197,7 @@ export async function createTenantInvoiceImpl(
     tenantEmail: tenant.email,
     tenantName: tenant.name,
     propertyId: params.propertyId,
-    ownerId: context.userId,
+    ownerId,
     amount: String(params.amount),
     amountPaid: '0',
     description: params.description,

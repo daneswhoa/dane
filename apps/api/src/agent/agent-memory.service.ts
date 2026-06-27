@@ -79,8 +79,13 @@ export class AgentMemoryService {
 
     const records = await query;
     if (records.length === 0) return [];
+    const msgs = records[0].messages;
+    if (!msgs) return [];
+    if (typeof msgs === 'object') {
+      return Array.isArray(msgs) ? msgs : [msgs];
+    }
     try {
-      return JSON.parse(records[0].messages || '[]');
+      return JSON.parse(msgs);
     } catch {
       return [];
     }
@@ -112,14 +117,12 @@ export class AgentMemoryService {
         .limit(1);
     }
 
-    const serializedMessages = JSON.stringify(messages);
-
     if (existing.length > 0) {
       const targetId = existing[0].id;
       await this.db
         .update(schema.agentConversations)
         .set({
-          messages: serializedMessages,
+          messages: messages,
           updatedAt: new Date(),
         })
         .where(eq(schema.agentConversations.id, targetId));
@@ -127,7 +130,7 @@ export class AgentMemoryService {
     } else {
       const inserted = await this.db.insert(schema.agentConversations).values({
         userId,
-        messages: serializedMessages,
+        messages: messages,
       }).returning({ id: schema.agentConversations.id });
       return inserted[0]?.id;
     }
@@ -150,14 +153,20 @@ export class AgentMemoryService {
 
     return list.map((record: any) => {
       let title = 'New Conversation';
-      try {
-        const msgs = JSON.parse(record.messages || '[]');
+      const msgs = typeof record.messages === 'object' ? record.messages : (() => {
+        try {
+          return JSON.parse(record.messages || '[]');
+        } catch {
+          return [];
+        }
+      })();
+      if (Array.isArray(msgs)) {
         const firstUserMsg = msgs.find((m: any) => m.sender === 'user' || m.role === 'user');
         if (firstUserMsg) {
           const rawText = firstUserMsg.text || firstUserMsg.content || '';
           title = rawText.substring(0, 45) + (rawText.length > 45 ? '...' : '');
         }
-      } catch {}
+      }
       return {
         id: record.id,
         title,

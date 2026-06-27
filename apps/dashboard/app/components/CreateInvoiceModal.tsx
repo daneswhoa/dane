@@ -30,7 +30,7 @@ export default function CreateInvoiceModal({ onClose, onSuccess }: CreateInvoice
   useEffect(() => {
     async function fetchProperties() {
       try {
-        const res = await fetch('http://localhost:4000/api/dashboard/billing-properties', { credentials: 'include' });
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/billing-properties`, { credentials: 'include' });
         if (res.ok) {
           const data = await res.json();
           setProperties(data);
@@ -61,7 +61,7 @@ export default function CreateInvoiceModal({ onClose, onSuccess }: CreateInvoice
     const selectedUnit = selectedProperty?.units?.find((u: any) => u.id === selectedUnitId);
 
     try {
-      const res = await fetch('http://localhost:4000/api/dashboard/invoices', {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/invoices`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',

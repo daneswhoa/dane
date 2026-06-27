@@ -83,7 +83,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
         const userName = session.user.name || 'Resident Tenant';
         const userEmail = session.user.email;
         
-        const profileRes = await fetch(`http://localhost:4000/api/dashboard/tenant/profile?userId=${userId}`, {
+        const profileRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/tenant/profile?userId=${userId}`, {
           credentials: 'include',
         });
         if (profileRes.ok) {

@@ -7,7 +7,7 @@ export default function RootIndex() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace('/finance/ledger');
+    router.replace('/overview');
   }, [router]);
 
   return null;

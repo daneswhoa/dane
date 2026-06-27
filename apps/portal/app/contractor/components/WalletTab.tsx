@@ -56,7 +56,7 @@ export default function WalletTab({ jobs }: WalletTabProps) {
     if (totalPaid <= 0) return;
     setIsWithdrawing(true);
     try {
-      const res = await fetch('http://localhost:4000/api/dashboard/stripe/payout', {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/stripe/payout`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ amount: totalPaid }),
@@ -80,7 +80,7 @@ export default function WalletTab({ jobs }: WalletTabProps) {
   const handleConnectStripe = async () => {
     setIsConnectingStripe(true);
     try {
-      const res = await fetch('http://localhost:4000/api/dashboard/stripe/connect', {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/stripe/connect`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include'

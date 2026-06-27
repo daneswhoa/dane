@@ -1,6 +1,6 @@
 import { SecurityContext } from '../agent-tools.service';
 import * as schema from '../../db/schema';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 import { ForbiddenException, BadRequestException } from '@nestjs/common';
 
@@ -163,51 +163,43 @@ export async function adjustPortfolioRentImpl(
   const property = propList[0];
   await service.checkPropertyAccess(params.propertyId, context);
 
-  const propUnits = await service.db
-    .select()
+  // Count units for reporting
+  const [countResult] = await service.db
+    .select({ total: sql<number>`count(*)::int` })
     .from(schema.units)
     .where(eq(schema.units.propertyId, params.propertyId));
+  const adjustmentCount = countResult?.total || 0;
 
-  let adjustmentCount = 0;
-  await service.db.transaction(async (tx: any) => {
-    for (const unit of propUnits) {
-      let currentRent = Number(unit.rent) || 0;
-      let newRent = currentRent;
+  // Bulk update all rents in a single query
+  if (params.percentage !== undefined) {
+    await service.db
+      .update(schema.units)
+      .set({ rent: sql`greatest(round(${schema.units.rent} * (1 + ${params.percentage} / 100.0)), 0)` })
+      .where(eq(schema.units.propertyId, params.propertyId));
+  } else if (params.amount !== undefined) {
+    await service.db
+      .update(schema.units)
+      .set({ rent: sql`greatest(${schema.units.rent} + ${params.amount}, 0)` })
+      .where(eq(schema.units.propertyId, params.propertyId));
+  }
 
-      if (params.percentage !== undefined) {
-        newRent = Math.round(currentRent * (1 + params.percentage / 100));
-      } else if (params.amount !== undefined) {
-        newRent = currentRent + params.amount;
-      }
+  const descStr = params.percentage !== undefined
+    ? `Sophia adjusted rent for property "${property.name}" by ${params.percentage}% across ${adjustmentCount} units.`
+    : `Sophia adjusted rent for property "${property.name}" by $${params.amount} across ${adjustmentCount} units.`;
 
-      if (newRent < 0) newRent = 0;
-
-      await tx
-        .update(schema.units)
-        .set({ rent: newRent })
-        .where(eq(schema.units.id, unit.id));
-        
-      adjustmentCount++;
-    }
-
-    const descStr = params.percentage !== undefined
-      ? `Sophia adjusted rent for property "${property.name}" by ${params.percentage}% across ${adjustmentCount} units.`
-      : `Sophia adjusted rent for property "${property.name}" by $${params.amount} across ${adjustmentCount} units.`;
-
-    await tx.insert(schema.auditLogs).values({
-      id: 'audit-' + Math.random().toString(36).substring(2, 9),
-      ownerId: property.ownerId,
-      actorName: 'Sophia AI Assistant',
-      actorEmail: 'sophia@landlord.nl',
-      actorInitials: 'SP',
-      categoryIconName: 'DollarSign',
-      categoryLabel: 'Finance',
-      description: descStr,
-      severity: 'info',
-      status: 'success',
-      ip: '127.0.0.1',
-      location: 'Local Loopback',
-    });
+  await service.db.insert(schema.auditLogs).values({
+    id: 'audit-' + Math.random().toString(36).substring(2, 9),
+    ownerId: property.ownerId,
+    actorName: 'Sophia AI Assistant',
+    actorEmail: 'sophia@landlord.nl',
+    actorInitials: 'SP',
+    categoryIconName: 'DollarSign',
+    categoryLabel: 'Finance',
+    description: descStr,
+    severity: 'info',
+    status: 'success',
+    ip: '127.0.0.1',
+    location: 'Local Loopback',
   });
 
   return {

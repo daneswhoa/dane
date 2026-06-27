@@ -1,4 +1,4 @@
-import { pgTable, varchar, text, integer, numeric, boolean, timestamp, serial, index, customType } from 'drizzle-orm/pg-core';
+import { pgTable, varchar, text, integer, numeric, boolean, timestamp, serial, index, customType, jsonb } from 'drizzle-orm/pg-core';
 
 export const numericNumber = customType<{ data: number; driverData: string }>({
   dataType() {
@@ -27,9 +27,9 @@ export const users = pgTable('user', {
   idNumber: varchar('id_number', { length: 100 }),
   leaseStart: timestamp('lease_start'),
   leaseEnd: timestamp('lease_end'),
-  kinDetails: text('kin_details'),
+  kinDetails: jsonb('kin_details'),
   allowedProperties: text('allowed_properties'),
-  permissions: text('permissions'),
+  permissions: jsonb('permissions'),
   stripeAccountId: varchar('stripe_account_id', { length: 255 }),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
@@ -157,7 +157,7 @@ export const tickets = pgTable('tickets', {
   photoUrl: varchar('photo_url', { length: 512 }),
   rating: integer('rating'),
   ratingComment: text('rating_comment'),
-  scheduledAt: varchar('scheduled_at', { length: 255 }),
+  scheduledAt: timestamp('scheduled_at'),
   quoteAmount: varchar('quote_amount', { length: 255 }),
   quoteStatus: varchar('quote_status', { length: 50 }),
   contractorMessage: text('contractor_message'),
@@ -193,7 +193,7 @@ export const contractors = pgTable('contractors', {
 export const agentConversations = pgTable('agent_conversations', {
   id: serial('id').primaryKey(),
   userId: varchar('user_id', { length: 255 }).notNull().references(() => users.id),
-  messages: text('messages').default('[]'),
+  messages: jsonb('messages').default([]),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
 });
@@ -365,9 +365,27 @@ export const agentErrors = pgTable('agent_errors', {
 export const contractorBookmarks = pgTable('contractor_bookmarks', {
   id: varchar('id', { length: 255 }).primaryKey(),
   userId: varchar('user_id', { length: 255 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
-  contractorId: varchar('contractor_id', { length: 255 }).primaryKey(), // Using contractorId as primary key
+  contractorId: varchar('contractor_id', { length: 255 }).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+}, (table) => [
+  index('contractor_bookmarks_user_id_idx').on(table.userId),
+]);
+
+export const leases = pgTable('leases', {
+  id: varchar('id', { length: 255 }).primaryKey(),
+  tenantId: varchar('tenant_id', { length: 255 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  propertyId: varchar('property_id', { length: 255 }).references(() => properties.id, { onDelete: 'set null' }),
+  unitId: varchar('unit_id', { length: 255 }).references(() => units.id, { onDelete: 'set null' }),
+  startDate: timestamp('start_date').notNull(),
+  endDate: timestamp('end_date').notNull(),
+  status: varchar('status', { length: 50 }).notNull().default('active'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => [
+  index('leases_tenant_id_idx').on(table.tenantId),
+  index('leases_property_id_idx').on(table.propertyId),
+  index('leases_unit_id_idx').on(table.unitId),
+]);
 
 
 

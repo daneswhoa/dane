@@ -40,7 +40,7 @@ export default function InvoiceDetailPage() {
       setError(null);
       try {
         console.log('Fetching invoice details for ID:', params.id);
-        const res = await fetch(`http://localhost:4000/api/dashboard/invoices/${params.id}`, { credentials: 'include' });
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/invoices/${params.id}`, { credentials: 'include' });
         console.log('Invoice fetch response status:', res.status);
         if (res.ok) {
           const data = await res.json();
@@ -104,7 +104,7 @@ export default function InvoiceDetailPage() {
     }
 
     try {
-      const res = await fetch(`http://localhost:4000/api/dashboard/invoices/${invoice.id}/pay`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/invoices/${invoice.id}/pay`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ amount: amountToPay }),
@@ -141,7 +141,7 @@ export default function InvoiceDetailPage() {
   const handleReconcile = async () => {
     if (!invoice) return;
     try {
-      const res = await fetch(`http://localhost:4000/api/dashboard/invoices/${invoice.id}/reconcile`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/invoices/${invoice.id}/reconcile`, {
         method: 'POST',
         credentials: 'include',
       });
@@ -172,7 +172,7 @@ export default function InvoiceDetailPage() {
   const handleCancel = async () => {
     if (!invoice) return;
     try {
-      const res = await fetch(`http://localhost:4000/api/dashboard/invoices/${invoice.id}/cancel`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/invoices/${invoice.id}/cancel`, {
         method: 'POST',
         credentials: 'include',
       });

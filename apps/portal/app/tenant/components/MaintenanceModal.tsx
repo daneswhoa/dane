@@ -40,7 +40,7 @@ export default function MaintenanceModal({ isOpen, onClose }: MaintenanceModalPr
     setIsSubmitting(true);
 
     try {
-      const res = await fetch('http://localhost:4000/api/dashboard/maintenance', {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/maintenance`, {
         method: 'POST',
         credentials: 'include',
         headers: {

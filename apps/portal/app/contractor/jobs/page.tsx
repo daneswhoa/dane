@@ -6,7 +6,7 @@ import InvoiceModal from '../components/InvoiceModal';
 import JobDetailsModal from '../components/JobDetailsModal';
 import { MaintenanceJob } from '../types';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}`;
 
 export default function ContractorJobsPage() {
   const { jobs, loading, setErrorMsg, fetchData } = useContractor();

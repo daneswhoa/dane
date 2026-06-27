@@ -47,7 +47,7 @@ export default function PropertyDetailPage() {
 
   async function loadProperty() {
     try {
-      const res = await fetch(`http://localhost:4000/api/dashboard/properties/${propertyId}`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/properties/${propertyId}`, {
         credentials: 'include'
       });
       if (!res.ok) throw new Error('Property asset not found or access denied.');

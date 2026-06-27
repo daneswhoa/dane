@@ -17,19 +17,19 @@ export default function WalletTab() {
 
   const fetchData = async () => {
     try {
-      const profRes = await fetch('http://localhost:4000/api/dashboard/profile', { credentials: 'include' });
+      const profRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/profile`, { credentials: 'include' });
       if (profRes.ok) {
         const profData = await profRes.json();
         setProfile(profData);
       }
 
-      const sumRes = await fetch('http://localhost:4000/api/dashboard/summary', { credentials: 'include' });
+      const sumRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/summary`, { credentials: 'include' });
       if (sumRes.ok) {
         const sumData = await sumRes.json();
         setSummary(sumData);
       }
 
-      const wRes = await fetch('http://localhost:4000/api/dashboard/withdrawals', { credentials: 'include' });
+      const wRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/withdrawals`, { credentials: 'include' });
       if (wRes.ok) {
         const wData = await wRes.json();
         setWithdrawals(wData);
@@ -52,7 +52,7 @@ export default function WalletTab() {
     }
     setIsWithdrawing(true);
     try {
-      const res = await fetch('http://localhost:4000/api/dashboard/stripe/payout', {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/stripe/payout`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ amount: summary.cashBalance }),
@@ -76,7 +76,7 @@ export default function WalletTab() {
   const handleConnectStripe = async () => {
     setIsConnectingStripe(true);
     try {
-      const res = await fetch('http://localhost:4000/api/dashboard/stripe/connect', {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/stripe/connect`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include'

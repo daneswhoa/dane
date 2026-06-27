@@ -34,12 +34,12 @@ export function InviteTenantModal({ onClose, ownerId = 'current-user-id' }: Invi
 
   useEffect(() => {
     // Fetch properties and units on mount
-    fetch('http://localhost:4000/api/dashboard/properties', { credentials: 'include' })
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/properties`, { credentials: 'include' })
       .then(res => res.json())
       .then(data => Array.isArray(data) ? setProperties(data) : [])
       .catch(() => {});
       
-    fetch('http://localhost:4000/api/dashboard/units', { credentials: 'include' })
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/units`, { credentials: 'include' })
       .then(res => res.json())
       .then(data => Array.isArray(data) ? setUnits(data) : [])
       .catch(() => {});
@@ -56,7 +56,7 @@ export function InviteTenantModal({ onClose, ownerId = 'current-user-id' }: Invi
 
     setIsLoading(true);
     try {
-      const res = await fetch('http://localhost:4000/api/dashboard/invites', {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/invites`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',

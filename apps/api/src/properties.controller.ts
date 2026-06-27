@@ -292,6 +292,9 @@ export class PropertiesController {
             tenantUserId = existingUser[0].id;
           } else {
             tenantUserId = 'user-' + Math.random().toString(36).substring(2, 9);
+            const kinDetailsObj = unit.kinDetails && unit.kinDetails.length > 0 
+              ? (typeof unit.kinDetails === 'string' ? JSON.parse(unit.kinDetails) : unit.kinDetails)
+              : null;
             await this.db.insert(schema.users).values({
               id: tenantUserId,
               name: unit.tenantName,
@@ -300,7 +303,7 @@ export class PropertiesController {
               phone: unit.tenantPhone || null,
               leaseStart: unit.leaseStart ? new Date(unit.leaseStart) : null,
               leaseEnd: unit.leaseEnd ? new Date(unit.leaseEnd) : null,
-              kinDetails: unit.kinDetails && unit.kinDetails.length > 0 ? JSON.stringify(unit.kinDetails) : null,
+              kinDetails: kinDetailsObj,
             });
           }
         }
@@ -322,6 +325,28 @@ export class PropertiesController {
           unitType: uType,
           arrears: Number(unit.arrears) || 0,
         });
+
+        // Insert lease record if occupied
+        if (unit.status === 'occupied' && tenantUserId) {
+          const lStart = unit.leaseStart ? new Date(unit.leaseStart) : new Date();
+          const lEnd = unit.leaseEnd ? new Date(unit.leaseEnd) : new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+          
+          await this.db.update(schema.users).set({
+            leaseStart: lStart,
+            leaseEnd: lEnd,
+          }).where(eq(schema.users.id, tenantUserId));
+
+          const leaseId = 'lease-' + Math.random().toString(36).substring(2, 9);
+          await this.db.insert(schema.leases).values({
+            id: leaseId,
+            tenantId: tenantUserId,
+            propertyId: id,
+            unitId: unitId,
+            startDate: lStart,
+            endDate: lEnd,
+            status: 'active',
+          });
+        }
 
         // Now if occupied, insert the invoices that reference the unit
         if (unit.status === 'occupied' && tenantUserId) {

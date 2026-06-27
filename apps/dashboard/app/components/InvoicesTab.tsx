@@ -98,7 +98,7 @@ export default function InvoicesTab() {
     setIsLoading(true);
     let loadedData = defaultInvoices;
     try {
-      const res = await fetch('http://localhost:4000/api/dashboard/invoices', { credentials: 'include' });
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/invoices`, { credentials: 'include' });
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) {
@@ -346,7 +346,7 @@ export default function InvoicesTab() {
                                       onClick={async () => {
                                         setActiveMenu(null);
                                         try {
-                                          const res = await fetch(`http://localhost:4000/api/dashboard/invoices/${inv.id}/reconcile`, {
+                                          const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/invoices/${inv.id}/reconcile`, {
                                             method: 'POST',
                                             credentials: 'include',
                                           });
@@ -369,7 +369,7 @@ export default function InvoicesTab() {
                                       onClick={async () => {
                                         setActiveMenu(null);
                                         try {
-                                          const res = await fetch(`http://localhost:4000/api/dashboard/invoices/${inv.id}/cancel`, {
+                                          const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/invoices/${inv.id}/cancel`, {
                                             method: 'POST',
                                             credentials: 'include',
                                           });
@@ -441,7 +441,7 @@ export default function InvoicesTab() {
             setShowCreateModal(false);
             // Re-fetch invoices instead of hard reload
             try {
-              const res = await fetch('http://localhost:4000/api/dashboard/invoices', { credentials: 'include' });
+              const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/invoices`, { credentials: 'include' });
               if (res.ok) {
                 const data = await res.json();
                 if (Array.isArray(data)) {

@@ -124,7 +124,7 @@ export default function ProfileWizardModal({ isOpen, onClose, profile }: Profile
     setIsSaving(true);
     setSaveError('');
     try {
-      const res = await fetch('http://localhost:4000/api/dashboard/tenant/profile/update', {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/tenant/profile/update`, {
         method: 'POST',
         credentials: 'include',
         headers: {

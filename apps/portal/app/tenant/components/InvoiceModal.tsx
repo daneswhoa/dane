@@ -238,7 +238,7 @@ function CheckoutForm({ invoice, onSuccess }: CheckoutFormProps) {
 
     try {
       // 1. Create Payment Intent on Backend with credentials included to send cookies
-      const res = await fetch('http://localhost:4000/api/dashboard/payments/create-intent', {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/payments/create-intent`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ invoiceId: invoice.id }),
@@ -270,7 +270,7 @@ function CheckoutForm({ invoice, onSuccess }: CheckoutFormProps) {
 
       // 3. Confirm settlement on backend with credentials included
       if (result.paymentIntent?.status === 'succeeded') {
-        const confirmRes = await fetch('http://localhost:4000/api/dashboard/payments/confirm', {
+        const confirmRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/payments/confirm`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -357,7 +357,7 @@ export default function InvoiceModal({ invoiceId, onClose, profile }: InvoiceMod
     if (invoiceId) {
       setLoading(true);
       setStep('invoice');
-      fetch(`http://localhost:4000/api/dashboard/invoices`, {
+      fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/invoices`, {
         credentials: 'include'
       })
         .then((res) => res.json())

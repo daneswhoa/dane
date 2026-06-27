@@ -390,7 +390,7 @@ export default function PropertyFormWizard() {
 
     // Send the onboarding POST request to the NestJS PostgreSQL server
     try {
-      const res = await fetch('http://localhost:4000/api/dashboard/onboard', {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/onboard`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(onboardPayload),

@@ -35,7 +35,7 @@ export function EditPropertyModal({ property, onClose, onSuccess }: EditProperty
     try {
       // 1. Update basic details
       if (name !== property.name || address !== property.address) {
-        const updateRes = await fetch(`http://localhost:4000/api/dashboard/properties/${property.id}/update`, {
+        const updateRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/properties/${property.id}/update`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name, address }),
@@ -60,7 +60,7 @@ export function EditPropertyModal({ property, onClose, onSuccess }: EditProperty
           payload.amount = val;
         }
 
-        const adjustRes = await fetch(`http://localhost:4000/api/dashboard/properties/${property.id}/adjust-rent`, {
+        const adjustRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/properties/${property.id}/adjust-rent`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),

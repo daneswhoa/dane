@@ -37,7 +37,7 @@ export function MoveTenantModal({
   useEffect(() => {
     async function fetchVacantUnits() {
       try {
-        const res = await fetch('http://localhost:4000/api/dashboard/units', {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/units`, {
           credentials: 'include',
         });
         if (!res.ok) throw new Error('Failed to retrieve unit records.');
@@ -66,7 +66,7 @@ export function MoveTenantModal({
     setError('');
 
     try {
-      const res = await fetch('http://localhost:4000/api/dashboard/tenants/move', {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/tenants/move`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

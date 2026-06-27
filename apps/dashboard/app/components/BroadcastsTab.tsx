@@ -18,7 +18,7 @@ export default function BroadcastsTab() {
 
   const fetchCampaigns = () => {
     setLoading(true);
-    fetch('http://localhost:4000/api/dashboard/campaigns', { credentials: 'include' })
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/campaigns`, { credentials: 'include' })
       .then(res => res.json())
       .then(data => {
         if (Array.isArray(data)) {

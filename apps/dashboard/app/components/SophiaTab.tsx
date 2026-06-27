@@ -46,9 +46,12 @@ interface ActionQueueItem {
   timestamp: string;
 }
 
+const apiBase = process.env.NEXT_PUBLIC_API_URL || `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}`;
+
 export default function SophiaTab() {
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [isSending, setIsSending] = useState(false);
   const [statusMessage, setStatusMessage] = useState('Sophia is ready');
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -69,7 +72,7 @@ export default function SophiaTab() {
 
   const loadThreadsList = async () => {
     try {
-      const res = await fetch('http://localhost:4000/api/agent/threads', { credentials: 'include' });
+      const res = await fetch(`${apiBase}/api/agent/threads`, { credentials: 'include' });
       const data = await res.json();
       if (data.success && data.threads) {
         setThreads(data.threads);
@@ -83,7 +86,7 @@ export default function SophiaTab() {
 
   const handleNewChat = async () => {
     try {
-      const res = await fetch('http://localhost:4000/api/agent/threads', {
+      const res = await fetch(`${apiBase}/api/agent/threads`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -108,7 +111,7 @@ export default function SophiaTab() {
 
   const handleLoadThread = async (threadId: number) => {
     try {
-      const res = await fetch(`http://localhost:4000/api/agent/threads/${threadId}`, { credentials: 'include' });
+      const res = await fetch(`${apiBase}/api/agent/threads/${threadId}`, { credentials: 'include' });
       const data = await res.json();
       if (data.success) {
         setActiveConversationId(threadId);
@@ -138,7 +141,7 @@ export default function SophiaTab() {
 
   const handleDeleteThread = async (threadId: number) => {
     try {
-      const res = await fetch(`http://localhost:4000/api/agent/threads/${threadId}`, {
+      const res = await fetch(`${apiBase}/api/agent/threads/${threadId}`, {
         method: 'DELETE',
         credentials: 'include',
       });
@@ -160,7 +163,7 @@ export default function SophiaTab() {
     formData.append('file', file);
 
     try {
-      const response = await fetch('http://localhost:4000/api/properties/upload', {
+      const response = await fetch(`${apiBase}/api/properties/upload`, {
         method: 'POST',
         body: formData,
       });
@@ -228,7 +231,7 @@ export default function SophiaTab() {
 
   // Connect to WebSockets events gateway
   useEffect(() => {
-    const socketUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000') + '/events';
+    const socketUrl = (process.env.NEXT_PUBLIC_API_URL || `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}`) + '/events';
     const socketClient = io(socketUrl, {
       withCredentials: true,
       transports: ['websocket'],
@@ -275,6 +278,21 @@ export default function SophiaTab() {
           ];
         }
       });
+    });
+
+    // Hallucination guard: backend detected a data claim without tool calls
+    // and is retrying. Clear the last sophia message so the user doesn't see
+    // the discarded hallucinated text.
+    socketClient.on('sophia-token-reset', () => {
+      setMessages(prev => {
+        const lastMsg = prev[prev.length - 1];
+        if (lastMsg && lastMsg.sender === 'sophia') {
+          return prev.slice(0, -1);
+        }
+        return prev;
+      });
+      setIsTyping(true);
+      setStatusMessage('Re-checking with tools...');
     });
 
     socketClient.on('sophia-token-metrics', (data: { successCount: number; failureCount: number }) => {
@@ -534,6 +552,7 @@ export default function SophiaTab() {
   }, [messages, isTyping]);
 
   const handleSendMessage = (text: string) => {
+    if (isSending || isTyping) return;
     if (!text.trim() && !uploadedImageUrl) return;
 
     let fullText = text;
@@ -554,6 +573,7 @@ export default function SophiaTab() {
     setInputValue('');
     setUploadedImageUrl(null);
     setIsTyping(true);
+    setIsSending(true);
 
     if (socket) {
       const historyStr = localStorage.getItem('sophia_navigation_history') || '[]';
@@ -563,6 +583,9 @@ export default function SophiaTab() {
         navigationHistory: JSON.parse(historyStr)
       });
     }
+
+    // Release send lock after a short delay to prevent double-submit
+    setTimeout(() => setIsSending(false), 1000);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {

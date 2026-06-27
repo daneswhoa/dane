@@ -59,7 +59,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   useEffect(() => {
     if (!session?.user) return;
 
-    const socketUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000') + '/events';
+    const socketUrl = (process.env.NEXT_PUBLIC_API_URL || `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}`) + '/events';
     const socketClient = io(socketUrl, {
       withCredentials: true,
       transports: ['websocket'],
@@ -136,7 +136,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
     const fetchMetrics = async () => {
       try {
-        const res = await fetch('http://localhost:4000/api/dashboard/sidebar-metrics', { credentials: 'include' });
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/sidebar-metrics`, { credentials: 'include' });
         if (res.ok) {
           const data = await res.json();
           setMetrics(data);
@@ -273,7 +273,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     }
 
     try {
-      const res = await fetch('http://localhost:4000/api/dashboard/setup', {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/setup`, {
         method: 'POST',
         body: formData,
       });

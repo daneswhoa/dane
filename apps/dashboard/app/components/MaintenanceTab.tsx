@@ -209,7 +209,7 @@ export default function MaintenanceTab() {
 
     try {
       // 1. Fetch Maintenance Tickets
-      const tRes = await fetch('http://localhost:4000/api/dashboard/maintenance', {
+      const tRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/maintenance`, {
         credentials: 'include',
       });
       if (!tRes.ok) throw new Error('Could not fetch maintenance tickets.');
@@ -217,7 +217,7 @@ export default function MaintenanceTab() {
       setTickets(tData);
 
       // 2. Fetch Properties for Form
-      const pRes = await fetch('http://localhost:4000/api/dashboard/properties', {
+      const pRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/properties`, {
         credentials: 'include',
       });
       if (pRes.ok) {
@@ -226,7 +226,7 @@ export default function MaintenanceTab() {
       }
 
       // 3. Fetch Units for Form
-      const uRes = await fetch('http://localhost:4000/api/dashboard/units', {
+      const uRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/units`, {
         credentials: 'include',
       });
       if (uRes.ok) {
@@ -235,7 +235,7 @@ export default function MaintenanceTab() {
       }
 
       // 4. Fetch Contractors for Assignee choices
-      const cRes = await fetch('http://localhost:4000/api/dashboard/contractors', {
+      const cRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/contractors`, {
         credentials: 'include',
       });
       if (cRes.ok) {
@@ -303,7 +303,7 @@ export default function MaintenanceTab() {
     };
 
     try {
-      const res = await fetch('http://localhost:4000/api/dashboard/maintenance', {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/maintenance`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -355,7 +355,7 @@ export default function MaintenanceTab() {
 
     setIsAssigning(true);
     try {
-      const res = await fetch(`http://localhost:4000/api/dashboard/maintenance/${showAssignModal.id}/assign`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/maintenance/${showAssignModal.id}/assign`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -412,7 +412,7 @@ export default function MaintenanceTab() {
       return;
     }
     try {
-      const res = await fetch(`http://localhost:4000/api/dashboard/maintenance/${ticketId}/status`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/maintenance/${ticketId}/status`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -437,7 +437,7 @@ export default function MaintenanceTab() {
     }
     try {
       // 1. Mark ticket as paid to contractor
-      const res1 = await fetch(`http://localhost:4000/api/dashboard/maintenance/${ticketId}/status`, {
+      const res1 = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/maintenance/${ticketId}/status`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -448,7 +448,7 @@ export default function MaintenanceTab() {
       // 2. Create invoice for tenant
       const ticket = tickets.find(t => t.id === ticketId);
       if (ticket && ticket.tenantId) {
-        await fetch(`http://localhost:4000/api/dashboard/invoices`, {
+        await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/invoices`, {
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
@@ -478,7 +478,7 @@ export default function MaintenanceTab() {
       return;
     }
     try {
-      const res = await fetch(`http://localhost:4000/api/dashboard/maintenance/${ticketId}/status`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/maintenance/${ticketId}/status`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -499,7 +499,7 @@ export default function MaintenanceTab() {
   // Status transitions
   const updateTicketStatus = async (ticketId: string, status: string) => {
     try {
-      const res = await fetch(`http://localhost:4000/api/dashboard/maintenance/${ticketId}/status`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/maintenance/${ticketId}/status`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -527,7 +527,7 @@ export default function MaintenanceTab() {
         const clean = quoteAmt.replace(/[^0-9.]/g, '');
         if (clean) parsedAmount = Number(clean);
       }
-      const res = await fetch(`http://localhost:4000/api/dashboard/maintenance/${ticketId}/status`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/maintenance/${ticketId}/status`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -550,7 +550,7 @@ export default function MaintenanceTab() {
 
   const handleNegotiateQuote = async (ticketId: string) => {
     try {
-      const res = await fetch(`http://localhost:4000/api/dashboard/maintenance/${ticketId}/status`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/maintenance/${ticketId}/status`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -577,7 +577,7 @@ export default function MaintenanceTab() {
 
   const handleDeclineQuote = async (ticketId: string) => {
     try {
-      const res = await fetch(`http://localhost:4000/api/dashboard/maintenance/${ticketId}/status`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/maintenance/${ticketId}/status`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },

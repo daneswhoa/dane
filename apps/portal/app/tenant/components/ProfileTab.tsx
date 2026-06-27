@@ -49,7 +49,7 @@ export default function ProfileTab({ profile }: ProfileTabProps) {
     setIsLoading(true);
     setError('');
     try {
-      const res = await fetch('http://localhost:4000/api/dashboard/tenant/leave/request', {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/tenant/leave/request`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -76,7 +76,7 @@ export default function ProfileTab({ profile }: ProfileTabProps) {
     setIsLoading(true);
     setError('');
     try {
-      const res = await fetch('http://localhost:4000/api/dashboard/tenant/leave/confirm', {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/tenant/leave/confirm`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -110,7 +110,7 @@ export default function ProfileTab({ profile }: ProfileTabProps) {
     setIsLoading(true);
     
     try {
-      const res = await fetch('http://localhost:4000/api/dashboard/invites/verify', {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/invites/verify`, {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -139,7 +139,7 @@ export default function ProfileTab({ profile }: ProfileTabProps) {
     }
     setIsLoading(true);
     try {
-      const res = await fetch('http://localhost:4000/api/dashboard/invites/accept', {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/invites/accept`, {
         method: 'POST',
         credentials: 'include',
         headers: {

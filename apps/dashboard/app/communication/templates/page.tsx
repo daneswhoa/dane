@@ -44,7 +44,7 @@ export default function CommunicationTemplatesPage() {
   const fetchTemplates = () => {
     setLoading(true);
     setError('');
-    fetch('http://localhost:4000/api/dashboard/email-templates', { credentials: 'include' })
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/email-templates`, { credentials: 'include' })
       .then(res => {
         if (!res.ok) throw new Error('Failed to retrieve templates');
         return res.json();
@@ -107,7 +107,7 @@ export default function CommunicationTemplatesPage() {
     setSaveError('');
 
     try {
-      const res = await fetch('http://localhost:4000/api/dashboard/email-templates', {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/email-templates`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -138,7 +138,7 @@ export default function CommunicationTemplatesPage() {
   const handleDelete = async (id: string) => {
     setIsDeleting(true);
     try {
-      const res = await fetch(`http://localhost:4000/api/dashboard/email-templates/${id}/delete`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/email-templates/${id}/delete`, {
         method: 'POST',
         credentials: 'include',
       });

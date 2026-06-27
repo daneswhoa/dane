@@ -34,7 +34,7 @@ export default function PaymentsTab({ profile, onPayNow, onViewInvoice }: Paymen
     const loadInvoices = (showLoading = true) => {
       if (profile?.id) {
         if (showLoading) setLoading(true);
-        fetch(`http://localhost:4000/api/dashboard/invoices?tenantId=${profile.id}`, {
+        fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/invoices?tenantId=${profile.id}`, {
           credentials: 'include'
         })
           .then((res) => res.json())

@@ -61,7 +61,7 @@ function LoginForm() {
     setSwitchingRole(newRole);
     setErrorMessage('');
     try {
-      const res = await fetch('http://localhost:4000/api/auth/update-onboarding', {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/auth/update-onboarding`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

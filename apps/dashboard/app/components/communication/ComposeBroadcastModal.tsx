@@ -51,7 +51,7 @@ export function ComposeBroadcastModal({ onClose }: ComposeBroadcastModalProps) {
   useEffect(() => {
     // Fetch properties
     setPropertiesLoading(true);
-    fetch('http://localhost:4000/api/dashboard/properties', { credentials: 'include' })
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/properties`, { credentials: 'include' })
       .then(res => res.json())
       .then(data => {
         if (Array.isArray(data)) setProperties(data);
@@ -61,7 +61,7 @@ export function ComposeBroadcastModal({ onClose }: ComposeBroadcastModalProps) {
 
     // Fetch all active tenants
     setTenantsLoading(true);
-    fetch('http://localhost:4000/api/dashboard/tenants', { credentials: 'include' })
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/tenants`, { credentials: 'include' })
       .then(res => res.json())
       .then(data => {
         if (Array.isArray(data)) setTenants(data);
@@ -71,7 +71,7 @@ export function ComposeBroadcastModal({ onClose }: ComposeBroadcastModalProps) {
 
     // Fetch all units
     setUnitsLoading(true);
-    fetch('http://localhost:4000/api/dashboard/units', { credentials: 'include' })
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/units`, { credentials: 'include' })
       .then(res => res.json())
       .then(data => {
         if (Array.isArray(data)) setUnits(data);
@@ -81,7 +81,7 @@ export function ComposeBroadcastModal({ onClose }: ComposeBroadcastModalProps) {
 
     // Fetch team
     setTeamLoading(true);
-    fetch('http://localhost:4000/api/dashboard/team', { credentials: 'include' })
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/team`, { credentials: 'include' })
       .then(res => res.json())
       .then(data => {
         if (Array.isArray(data)) setTeamMembers(data);
@@ -91,7 +91,7 @@ export function ComposeBroadcastModal({ onClose }: ComposeBroadcastModalProps) {
 
     // Fetch email templates
     setTemplatesLoading(true);
-    fetch('http://localhost:4000/api/dashboard/email-templates', { credentials: 'include' })
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/email-templates`, { credentials: 'include' })
       .then(res => res.json())
       .then(data => {
         if (Array.isArray(data)) setTemplates(data);
@@ -153,7 +153,7 @@ export function ComposeBroadcastModal({ onClose }: ComposeBroadcastModalProps) {
     }
 
     try {
-      const res = await fetch('http://localhost:4000/api/dashboard/campaigns', {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/campaigns`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

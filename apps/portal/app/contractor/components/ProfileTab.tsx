@@ -29,7 +29,7 @@ export default function ProfileTab({ profile, jobs, onEditProfile }: ProfileTabP
   const handleStatusUpdate = async (newStatus: 'active' | 'offline') => {
     if (!profile?.id) return;
     try {
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/contractor/profile`, {
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL || `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}`}/api/dashboard/contractor/profile`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: profile.id, status: newStatus })

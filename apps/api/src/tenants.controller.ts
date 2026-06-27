@@ -59,9 +59,13 @@ export class TenantsController {
       return list.map((t: any) => {
         let kinsList = [];
         if (t.kinDetails) {
-          try {
-            kinsList = JSON.parse(t.kinDetails);
-          } catch (e) {}
+          if (typeof t.kinDetails === 'object') {
+            kinsList = t.kinDetails;
+          } else {
+            try {
+              kinsList = JSON.parse(t.kinDetails);
+            } catch (e) {}
+          }
         }
         return {
           id: t.id,
@@ -132,14 +136,14 @@ export class TenantsController {
       let nextOfKin = [];
       if (user.kinDetails) {
         try {
-          const parsed = JSON.parse(user.kinDetails);
+          const parsed = typeof user.kinDetails === 'object' ? user.kinDetails : JSON.parse(user.kinDetails);
           if (parsed && typeof parsed === 'object') {
             emergencyContacts = parsed.emergencyContacts || [];
             nextOfKin = parsed.nextOfKin || [];
           }
         } catch (e) {
           try {
-            const arr = JSON.parse(user.kinDetails);
+            const arr = typeof user.kinDetails === 'object' ? user.kinDetails : JSON.parse(user.kinDetails);
             if (Array.isArray(arr)) {
               emergencyContacts = arr;
             }
@@ -244,10 +248,10 @@ export class TenantsController {
     }
 
     try {
-      const kinDetailsStr = JSON.stringify({
+      const kinDetailsObj = {
         emergencyContacts: body.emergencyContacts || [],
         nextOfKin: body.nextOfKin || [],
-      });
+      };
 
       await this.db
         .update(schema.users)
@@ -256,7 +260,7 @@ export class TenantsController {
           email: body.email,
           phone: body.phone,
           image: body.photoUrl,
-          kinDetails: kinDetailsStr,
+          kinDetails: kinDetailsObj,
           updatedAt: new Date(),
         })
         .where(eq(schema.users.id, targetUserId));
@@ -502,14 +506,27 @@ export class TenantsController {
           })
           .where(eq(schema.units.id, invite.unitId || ''));
 
+        const leaseStart = new Date();
+        const leaseEnd = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
         await tx
           .update(schema.users)
           .set({
             role: 'tenant',
-            leaseStart: new Date(),
-            leaseEnd: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+            leaseStart,
+            leaseEnd,
           })
           .where(eq(schema.users.id, tenantId));
+
+        const leaseId = 'lease-' + Math.random().toString(36).substring(2, 9);
+        await tx.insert(schema.leases).values({
+          id: leaseId,
+          tenantId: tenantId,
+          propertyId: invite.propertyId,
+          unitId: invite.unitId,
+          startDate: leaseStart,
+          endDate: leaseEnd,
+          status: 'active',
+        });
 
         const invoiceId = 'inv-' + Math.random().toString(36).substring(2, 9);
         const invoiceNum = 'INV-' + Math.floor(100000 + Math.random() * 900000);
@@ -780,6 +797,10 @@ export class TenantsController {
         await tx.update(schema.users)
           .set({ leaseStart: null, leaseEnd: null })
           .where(eq(schema.users.id, targetUserId));
+
+        await tx.update(schema.leases)
+          .set({ status: 'ended', endDate: new Date() })
+          .where(and(eq(schema.leases.tenantId, targetUserId), eq(schema.leases.status, 'active')));
 
         await tx.delete(schema.verifications).where(eq(schema.verifications.id, verificationId));
       });

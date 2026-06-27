@@ -2,8 +2,9 @@ import { Injectable, Inject, BadRequestException, ForbiddenException } from '@ne
 import { DATABASE_CONNECTION } from '../db/database.module';
 import { EmailService } from '../email.service';
 import * as schema from '../db/schema';
-import { eq, and, desc, sql } from 'drizzle-orm';
+import { eq, and, desc, sql, inArray } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
+import { ConfigService } from '@nestjs/config';
 
 import {
   getPropertiesImpl,
@@ -41,6 +42,7 @@ export class AgentToolsService {
   constructor(
     @Inject(DATABASE_CONNECTION) private readonly db: any,
     private readonly emailService: EmailService,
+    private readonly configService: ConfigService,
   ) {}
 
   /**
@@ -103,14 +105,83 @@ export class AgentToolsService {
   async calculateFormula(context: SecurityContext, params: { formula: string }) {
     await this.logActivity(context.userId, 'calculate_formula', `Calculated expression: ${params.formula}`);
 
-    // Safely evaluate simple math formulas (only allow numbers, +, -, *, /, (, ), .)
-    const cleanFormula = params.formula.replace(/[^0-9+\-*/().\s]/g, '');
     try {
-      const result = new Function(`return (${cleanFormula})`)();
+      const result = this.safeEvaluate(params.formula);
       return { success: true, formula: params.formula, result };
     } catch (e) {
       throw new BadRequestException('Invalid mathematical formula expression.');
     }
+  }
+
+  /**
+   * Safe math expression evaluator using tokenization and recursive descent.
+   * Supports: +, -, *, /, parentheses, and decimal numbers. No code execution.
+   */
+  private safeEvaluate(expr: string): number {
+    const tokens: string[] = [];
+    const cleaned = expr.replace(/\s+/g, '');
+    let i = 0;
+    while (i < cleaned.length) {
+      const ch = cleaned[i];
+      if ('0123456789.'.includes(ch)) {
+        let num = '';
+        while (i < cleaned.length && '0123456789.'.includes(cleaned[i])) {
+          num += cleaned[i++];
+        }
+        tokens.push(num);
+      } else if ('+-*/()'.includes(ch)) {
+        tokens.push(ch);
+        i++;
+      } else {
+        throw new Error(`Unexpected character: ${ch}`);
+      }
+    }
+
+    let pos = 0;
+    const peek = () => tokens[pos];
+    const consume = () => tokens[pos++];
+
+    const parseExpr = (): number => {
+      let left = parseTerm();
+      while (peek() === '+' || peek() === '-') {
+        const op = consume();
+        const right = parseTerm();
+        left = op === '+' ? left + right : left - right;
+      }
+      return left;
+    };
+
+    const parseTerm = (): number => {
+      let left = parseFactor();
+      while (peek() === '*' || peek() === '/') {
+        const op = consume();
+        const right = parseFactor();
+        left = op === '*' ? left * right : left / right;
+      }
+      return left;
+    };
+
+    const parseFactor = (): number => {
+      if (peek() === '(') {
+        consume();
+        const val = parseExpr();
+        if (peek() !== ')') throw new Error('Missing closing parenthesis');
+        consume();
+        return val;
+      }
+      if (peek() === '-') {
+        consume();
+        return -parseFactor();
+      }
+      const token = consume();
+      const num = Number(token);
+      if (isNaN(num)) throw new Error(`Invalid number: ${token}`);
+      return num;
+    };
+
+    const result = parseExpr();
+    if (pos !== tokens.length) throw new Error('Unexpected tokens after expression');
+    return result;
   }
 
   /**
@@ -178,27 +249,33 @@ export class AgentToolsService {
       return { totalProperties: 0, totalUnits: 0, occupancyRate: '0%', outstandingArrears: 0, activeTickets: 0 };
     }
 
-    const allUnits = await this.db
-      .select()
+    // Use SQL aggregates instead of loading all rows into memory
+    const [unitStats] = await this.db
+      .select({
+        totalUnits: sql<number>`count(*)::int`,
+        occupiedUnits: sql<number>`sum(case when ${schema.units.status} = 'occupied' then 1 else 0 end)::int`,
+        totalArrears: sql<number>`coalesce(sum(${schema.units.arrears}), 0)`,
+      })
       .from(schema.units)
-      .where(sql`${schema.units.propertyId} IN ${propertyIds}`);
+      .where(inArray(schema.units.propertyId, propertyIds));
 
-    const activeTickets = await this.db
-      .select()
+    const [ticketStats] = await this.db
+      .select({
+        activeTickets: sql<number>`count(*)::int`,
+      })
       .from(schema.tickets)
-      .where(and(sql`${schema.tickets.propertyId} IN ${propertyIds}`, eq(schema.tickets.status, 'open')));
+      .where(and(inArray(schema.tickets.propertyId, propertyIds), eq(schema.tickets.status, 'open')));
 
-    const totalUnits = allUnits.length;
-    const occupiedUnits = allUnits.filter((u: any) => u.status === 'occupied').length;
+    const totalUnits = unitStats?.totalUnits || 0;
+    const occupiedUnits = unitStats?.occupiedUnits || 0;
     const occupancyRate = totalUnits > 0 ? `${Math.round((occupiedUnits / totalUnits) * 100)}%` : '100%';
-    const totalArrears = allUnits.reduce((sum: number, u: any) => sum + (Number(u.arrears) || 0), 0);
 
     return {
       totalProperties: props.length,
       totalUnits,
       occupancyRate,
-      outstandingArrears: totalArrears,
-      activeTickets: activeTickets.length,
+      outstandingArrears: Number(unitStats?.totalArrears) || 0,
+      activeTickets: ticketStats?.activeTickets || 0,
     };
   }
 
@@ -656,6 +733,7 @@ export class AgentToolsService {
    * Tool: send_escalation_email
    */
   async sendEscalationEmail(context: SecurityContext, params: { errorDetails: string }) {
+    const supportEmail = this.configService.get<string>('SUPPORT_EMAIL') || 'support@landlord.nl';
     const subject = `CRITICAL: Sophia AI Error Escalation`;
     const bodyHtml = `
       <h3>Sophia Agent System Alert</h3>
@@ -666,8 +744,8 @@ export class AgentToolsService {
       <p>Reported automatically by Sophia Agent Infrastructure.</p>
     `;
 
-    await this.emailService.sendEmail('mark.mainac@gmail.com', subject, bodyHtml);
-    return { success: true, message: 'System escalation email has been dispatched to developer.' };
+    await this.emailService.sendEmail(supportEmail, subject, bodyHtml);
+    return { success: true, message: 'System escalation email has been dispatched.' };
   }
 
   /**
@@ -1025,7 +1103,7 @@ export class AgentToolsService {
         type: 'function',
         function: {
           name: 'send_escalation_email',
-          description: 'Escalate a repeated/recurring bug by sending alert details to mark.mainac@gmail.com.',
+          description: 'Escalate a repeated/recurring bug by sending alert details to the systems administrator.',
           parameters: {
             type: 'object',
             properties: { errorDetails: { type: 'string' } },

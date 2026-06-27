@@ -59,7 +59,7 @@ export default function TenantDetailPage() {
 
   async function loadTenantDetails() {
     try {
-      const res = await fetch(`http://localhost:4000/api/dashboard/tenant/profile?userId=${params.id}`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/tenant/profile?userId=${params.id}`, {
         credentials: 'include',
       });
       if (res.ok) {

@@ -32,7 +32,7 @@ export default function OrganizationPage() {
 
   const fetchStats = async () => {
     try {
-      const res = await fetch('http://localhost:4000/api/dashboard/team/org-stats', { credentials: 'include' });
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/team/org-stats`, { credentials: 'include' });
       if (res.ok) {
         const data = await res.json();
         setStats(data);
@@ -57,7 +57,7 @@ export default function OrganizationPage() {
     setErrorMessage('');
 
     try {
-      const res = await fetch('http://localhost:4000/api/dashboard/team/org-identity', {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/team/org-identity`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ organizationName: orgName, username }),

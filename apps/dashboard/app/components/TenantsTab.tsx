@@ -117,7 +117,7 @@ export default function TenantsTab() {
     setIsLoading(true);
     let loadedData = defaultTenants;
     try {
-      const res = await fetch('http://localhost:4000/api/dashboard/tenants', { credentials: 'include' });
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/tenants`, { credentials: 'include' });
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) {

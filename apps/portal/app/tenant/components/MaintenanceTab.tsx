@@ -105,7 +105,7 @@ export default function MaintenanceTab({ profile, onNewRequest }: MaintenanceTab
     if (!profile?.id) return;
     setLoading(true);
     try {
-      const res = await fetch(`http://localhost:4000/api/dashboard/maintenance?tenantId=${profile.id}`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/maintenance?tenantId=${profile.id}`, {
         credentials: 'include',
       });
       if (!res.ok) throw new Error('Failed to fetch maintenance requests.');
@@ -171,7 +171,7 @@ export default function MaintenanceTab({ profile, onNewRequest }: MaintenanceTab
 
     setIsSubmittingResolution(true);
     try {
-      const res = await fetch(`http://localhost:4000/api/dashboard/maintenance/${resolvingTicketId}/status`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/maintenance/${resolvingTicketId}/status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

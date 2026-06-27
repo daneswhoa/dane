@@ -39,7 +39,7 @@ function InvitePageContent() {
 
     const verifyInvite = async () => {
       try {
-        const res = await fetch('http://localhost:4000/api/dashboard/tenants/invites/verify', {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/tenants/invites/verify`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ code }),
@@ -68,8 +68,8 @@ function InvitePageContent() {
 
     const isTenant = inviteDetails.targetRole === 'tenant';
     const endpoint = isTenant 
-      ? 'http://localhost:4000/api/dashboard/tenants/invites/accept'
-      : 'http://localhost:4000/api/dashboard/team/invites/accept';
+      ? `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/tenants/invites/accept`
+      : `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/team/invites/accept`;
 
     try {
       const res = await fetch(endpoint, {
@@ -91,7 +91,7 @@ function InvitePageContent() {
         if (isTenant) {
           window.location.href = `${portalUrl}/tenant`;
         } else {
-          window.location.href = '/finance/ledger';
+          window.location.href = '/overview';
         }
       }, 2000);
     } catch (err: any) {

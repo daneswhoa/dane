@@ -48,7 +48,7 @@ export default function LedgerTab() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const txRes = await fetch('http://localhost:4000/api/dashboard/ledger', { credentials: 'include' });
+        const txRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/ledger`, { credentials: 'include' });
         if (txRes.ok) {
           const txs = await txRes.json();
           if (Array.isArray(txs)) {

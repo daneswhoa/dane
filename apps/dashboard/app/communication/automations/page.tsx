@@ -64,7 +64,7 @@ export default function CommunicationAutomationsPage() {
   // Load Flows & Templates
   useEffect(() => {
     // 1. Fetch workflows from API
-    fetch('http://localhost:4000/api/dashboard/automations', { credentials: 'include' })
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/automations`, { credentials: 'include' })
       .then(res => {
         if (!res.ok) throw new Error('API unreachable');
         return res.json();
@@ -80,7 +80,7 @@ export default function CommunicationAutomationsPage() {
 
     // 2. Fetch templates from API
     setTemplatesLoading(true);
-    fetch('http://localhost:4000/api/dashboard/email-templates', { credentials: 'include' })
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/email-templates`, { credentials: 'include' })
       .then(res => {
         if (!res.ok) throw new Error('API unreachable');
         return res.json();
@@ -134,7 +134,7 @@ export default function CommunicationAutomationsPage() {
     setFlows(prev => prev.map(f => f.id === id ? { ...f, isActive: newActiveState } : f));
 
     try {
-      const response = await fetch(`http://localhost:4000/api/dashboard/automations/${id}`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/automations/${id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -169,7 +169,7 @@ export default function CommunicationAutomationsPage() {
     setIsSaving(true);
     
     try {
-      const response = await fetch(`http://localhost:4000/api/dashboard/automations/${editingFlow.id}`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/automations/${editingFlow.id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

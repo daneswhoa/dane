@@ -80,7 +80,7 @@ export default function TeamRoster() {
 
   const fetchTeam = async () => {
     try {
-      const res = await fetch('http://localhost:4000/api/dashboard/team', { credentials: 'include' });
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/team`, { credentials: 'include' });
       if (res.ok) {
         const data = await res.json();
         setTeamMembers(data.members || []);
@@ -95,7 +95,7 @@ export default function TeamRoster() {
 
   const fetchProperties = async () => {
     try {
-      const res = await fetch('http://localhost:4000/api/dashboard/properties', { credentials: 'include' });
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/properties`, { credentials: 'include' });
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) {
@@ -117,7 +117,7 @@ export default function TeamRoster() {
     setIsSubmitting(true);
     setModalError(null);
     try {
-      const res = await fetch('http://localhost:4000/api/dashboard/team/invites', {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/team/invites`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',

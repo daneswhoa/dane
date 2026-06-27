@@ -12,7 +12,7 @@ import Step4RoleSelection from './components/Step4RoleSelection';
 import Step5WorkspaceSetup from './components/Step5WorkspaceSetup';
 import Step6InviteTeam from './components/Step6InviteTeam';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}`;
 
 // Step definitions for the stepper
 const BASE_STEPS = [

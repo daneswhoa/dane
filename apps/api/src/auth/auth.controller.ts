@@ -51,24 +51,9 @@ export class AuthController {
     }
   }
 
-  @All('debug-headers')
-  async debugHeaders(@Req() req: Request) {
-    return {
-      headers: req.headers,
-      env: {
-        COOKIE_DOMAIN: process.env.COOKIE_DOMAIN || 'NOT SET',
-        NODE_ENV: process.env.NODE_ENV || 'NOT SET',
-        BETTER_AUTH_URL: process.env.BETTER_AUTH_URL || 'NOT SET',
-        CORS_ORIGINS: process.env.CORS_ORIGINS || 'NOT SET',
-      }
-    };
-  }
-
   @All('*path')
   async handleAuth(@Req() req: Request, @Res() res: Response) {
-    console.log(`[Better Auth Request] ${req.method} ${req.url}`);
     const cookieHeader = req.headers.cookie || '';
-    console.log(`[Better Auth Incoming Cookies] ${cookieHeader || '(None)'}`);
     
     // Self-healing mechanism for duplicate cookies (host-only vs wildcard)
     const sessionTokenKeys = ['__Secure-better-auth.session_token', 'better-auth.session_token'];
@@ -113,8 +98,5 @@ export class AuthController {
     }
     
     await toNodeHandler(auth)(req, res);
-    
-    console.log(`[Better Auth Response Status] ${res.statusCode}`);
-    console.log(`[Better Auth Response Set-Cookie] ${JSON.stringify(res.getHeader('set-cookie') || '(None)')}`);
   }
 }

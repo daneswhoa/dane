@@ -19,6 +19,10 @@ export default function DebugPage() {
   const [headersLoading, setHeadersLoading] = useState(false);
   const [headersError, setHeadersError] = useState<string | null>(null);
 
+  const [localHeadersData, setLocalHeadersData] = useState<any>(null);
+  const [localHeadersLoading, setLocalHeadersLoading] = useState(false);
+  const [localHeadersError, setLocalHeadersError] = useState<string | null>(null);
+
   useEffect(() => {
     if (typeof window !== 'undefined') {
       setCookieData(document.cookie);
@@ -57,6 +61,23 @@ export default function DebugPage() {
       setHeadersError(err.message || 'Failed to fetch debug headers');
     } finally {
       setHeadersLoading(false);
+    }
+  };
+
+  const fetchLocalHeaders = async () => {
+    setLocalHeadersLoading(true);
+    setLocalHeadersError(null);
+    try {
+      const res = await fetch('/api-local/headers');
+      if (!res.ok) {
+        throw new Error(`HTTP Error ${res.status}: ${res.statusText}`);
+      }
+      const data = await res.json();
+      setLocalHeadersData(data);
+    } catch (err: any) {
+      setLocalHeadersError(err.message || 'Failed to fetch local headers');
+    } finally {
+      setLocalHeadersLoading(false);
     }
   };
 
@@ -264,7 +285,7 @@ export default function DebugPage() {
             API Diagnostics Console
           </h3>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
             
             {/* Test 1: Fetch session from proxy */}
             <div className="bg-slate-950 p-4 rounded-xl border border-slate-850 space-y-3">
@@ -314,10 +335,26 @@ export default function DebugPage() {
               </button>
             </div>
 
+            {/* Test 4: Fetch local headers */}
+            <div className="bg-slate-950 p-4 rounded-xl border border-slate-850 space-y-3">
+              <h4 className="text-xs font-semibold text-white">Local Cookies Check</h4>
+              <p className="text-slate-400 text-[11px] leading-relaxed">
+                View headers sent directly by the browser to this dashboard origin.
+              </p>
+              <button
+                onClick={fetchLocalHeaders}
+                disabled={localHeadersLoading}
+                className="w-full py-2 bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white text-xs font-bold rounded-lg transition"
+                id="btn-test-local-headers"
+              >
+                {localHeadersLoading ? 'Requesting...' : 'Check Browser Cookies'}
+              </button>
+            </div>
+
           </div>
 
           {/* Log Outputs */}
-          {(apiResponse || apiError || directSessionData || directSessionError || headersData || headersError) && (
+          {(apiResponse || apiError || directSessionData || directSessionError || headersData || headersError || localHeadersData || localHeadersError) && (
             <div className="space-y-4 pt-2 border-t border-slate-800">
               <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Console Outputs</span>
               
@@ -356,6 +393,19 @@ export default function DebugPage() {
                   </div>
                   <pre className="p-3 bg-slate-950 rounded-lg border border-slate-900 font-mono text-[11px] overflow-x-auto max-h-[250px] text-slate-300 select-all">
                     {headersError ? `Error: ${headersError}` : JSON.stringify(headersData, null, 2)}
+                  </pre>
+                </div>
+              )}
+
+              {/* Local Headers output */}
+              {(localHeadersData || localHeadersError) && (
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1.5 text-xs text-rose-400 font-medium">
+                    <ArrowRight className="w-3.5 h-3.5" />
+                    Local Browser Headers Check (Sent to Dashboard Origin)
+                  </div>
+                  <pre className="p-3 bg-slate-950 rounded-lg border border-slate-900 font-mono text-[11px] overflow-x-auto max-h-[250px] text-slate-300 select-all">
+                    {localHeadersError ? `Error: ${localHeadersError}` : JSON.stringify(localHeadersData, null, 2)}
                   </pre>
                 </div>
               )}

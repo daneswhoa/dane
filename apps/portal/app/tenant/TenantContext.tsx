@@ -4,6 +4,8 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { TenantProfile } from './types';
 import { useRouter, usePathname } from 'next/navigation';
 import { authClient } from '@repo/auth';
+import { AuthDebugger } from '../components/AuthDebugger';
+
 
 interface TenantContextType {
   profile: TenantProfile | null;
@@ -41,6 +43,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
   const [isDark, setIsDark] = useState(true);
   const [profile, setProfile] = useState<TenantProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [debugActive, setDebugActive] = useState(false);
 
   // Modals state
   const [invoiceModalId, setInvoiceModalId] = useState<string | null>(null);
@@ -75,6 +78,12 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
         const { data: session } = await authClient.getSession();
 
         if (!session || !session.user) {
+          const isDebug = typeof window !== 'undefined' && window.location.search.includes('debug=true');
+          if (isDebug) {
+            setDebugActive(true);
+            setLoading(false);
+            return;
+          }
           router.push('/login');
           return;
         }
@@ -113,6 +122,12 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
         });
       } catch (err) {
         console.error("Failed to load tenant session:", err);
+        const isDebug = typeof window !== 'undefined' && window.location.search.includes('debug=true');
+        if (isDebug) {
+          setDebugActive(true);
+          setLoading(false);
+          return;
+        }
         router.push('/login');
       } finally {
         setLoading(false);
@@ -146,6 +161,10 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
         break;
     }
   };
+
+  if (debugActive) {
+    return <AuthDebugger />;
+  }
 
   return (
     <TenantContext.Provider value={{

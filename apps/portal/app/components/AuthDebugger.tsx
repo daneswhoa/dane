@@ -63,7 +63,7 @@ export function AuthDebugger() {
         updatedSteps[2] = {
           name: 'Better Auth Client Session',
           status: 'success',
-          details: `Logged in as: ${sessionRes.data.user.email} (${sessionRes.data.user.role})`,
+          details: `Logged in as: ${sessionRes.data.user.email} (${(sessionRes.data.user as any).role || 'unknown'})`,
         };
       } else {
         updatedSteps[2] = {

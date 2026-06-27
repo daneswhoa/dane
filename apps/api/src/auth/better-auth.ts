@@ -149,14 +149,18 @@ export const auth = betterAuth({
     process.env.NEXT_PUBLIC_APP_URL!,
     process.env.NEXT_PUBLIC_PORTAL_URL!,
   ].filter(Boolean),
-  cookie: {
-    // Shared across subdomains in production (e.g., .mylandlordservices.com), undefined for localhost
-    domain: cleanCookieDomain || undefined,
-    sameSite: (isProduction || !!cleanCookieDomain) ? 'none' : 'lax',
-  },
   advanced: {
     // Force secure cookies in production, relax in dev
     useSecureCookies: isProduction || !!cleanCookieDomain,
+    // Enable cross-subdomain sharing using the shared parent domain
+    crossSubDomainCookies: {
+      enabled: !!cleanCookieDomain,
+      domain: cleanCookieDomain || undefined,
+    },
+    defaultCookieAttributes: {
+      sameSite: (isProduction || !!cleanCookieDomain) ? 'none' : 'lax',
+      secure: isProduction || !!cleanCookieDomain,
+    }
   },
 });
 export type Auth = typeof auth;

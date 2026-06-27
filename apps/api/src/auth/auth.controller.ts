@@ -66,6 +66,12 @@ export class AuthController {
 
   @All('*path')
   async handleAuth(@Req() req: Request, @Res() res: Response) {
-    return toNodeHandler(auth)(req, res);
+    console.log(`[Better Auth Request] ${req.method} ${req.url}`);
+    console.log(`[Better Auth Incoming Cookies] ${req.headers.cookie || '(None)'}`);
+    
+    await toNodeHandler(auth)(req, res);
+    
+    console.log(`[Better Auth Response Status] ${res.statusCode}`);
+    console.log(`[Better Auth Response Set-Cookie] ${JSON.stringify(res.getHeader('set-cookie') || '(None)')}`);
   }
 }

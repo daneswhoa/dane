@@ -162,5 +162,9 @@ export const auth = betterAuth({
       secure: isProduction || !!cleanCookieDomain,
     }
   },
+  logger: {
+    disabled: false,
+    level: "debug",
+  },
 });
 export type Auth = typeof auth;

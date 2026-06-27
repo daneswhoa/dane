@@ -18,7 +18,7 @@ async function bootstrap() {
 
   const port = process.env.PORT ?? 4000;
   await app.listen(port);
-  console.log('whoaa apiis on, lfg log');
+  console.log('whoaa apiis on, lfg log - railway deploy triggered');
   console.log(`API running on http://localhost:${port}`);
   console.log('DATABASE_URL connection host:', process.env.DATABASE_URL ? new URL(process.env.DATABASE_URL).host : 'UNDEFINED');
   console.log('RESEND_API_KEY prefix:', process.env.RESEND_API_KEY ? process.env.RESEND_API_KEY.slice(0, 10) + '...' : 'UNDEFINED');

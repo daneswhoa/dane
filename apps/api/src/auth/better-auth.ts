@@ -60,6 +60,17 @@ async function sendEmail({ to, subject, html }: { to: string; subject: string; h
   }
 }
 
+// Helper to clean environment variables (removes quotes and trims)
+const getCleanEnv = (name: string): string => {
+  const value = process.env[name];
+  if (!value) return '';
+  return value.replace(/^["']|["']$/g, '').trim();
+};
+
+const cleanCookieDomain = getCleanEnv('COOKIE_DOMAIN');
+const cleanNodeEnv = getCleanEnv('NODE_ENV');
+const isProduction = cleanNodeEnv === 'production';
+
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
     provider: 'pg',
@@ -139,13 +150,13 @@ export const auth = betterAuth({
     process.env.NEXT_PUBLIC_PORTAL_URL!,
   ].filter(Boolean),
   cookie: {
-    // Shared across subdomains in production (e.g., .landlord.hu), undefined for localhost
-    domain: process.env.COOKIE_DOMAIN || undefined,
-    sameSite: (process.env.NODE_ENV === 'production' || !!process.env.COOKIE_DOMAIN) ? 'none' : 'lax',
+    // Shared across subdomains in production (e.g., .mylandlordservices.com), undefined for localhost
+    domain: cleanCookieDomain || undefined,
+    sameSite: (isProduction || !!cleanCookieDomain) ? 'none' : 'lax',
   },
   advanced: {
     // Force secure cookies in production, relax in dev
-    useSecureCookies: process.env.NODE_ENV === 'production' || !!process.env.COOKIE_DOMAIN,
+    useSecureCookies: isProduction || !!cleanCookieDomain,
   },
 });
 export type Auth = typeof auth;

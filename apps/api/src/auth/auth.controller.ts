@@ -55,6 +55,11 @@ export class AuthController {
   async debugHeaders(@Req() req: Request) {
     return {
       headers: req.headers,
+      env: {
+        COOKIE_DOMAIN: process.env.COOKIE_DOMAIN || 'NOT SET',
+        NODE_ENV: process.env.NODE_ENV || 'NOT SET',
+        BETTER_AUTH_URL: process.env.BETTER_AUTH_URL || 'NOT SET',
+      }
     };
   }
 

@@ -15,7 +15,7 @@ echo Frontend changes pushed successfully! Firebase App Hosting should start bui
 
 echo.
 echo [2/4] Building and tagging NestJS API Docker container (clean build)...
-docker build --no-cache --tag europe-west4-docker.pkg.dev/landlordhungary/landlord-repo/api:latest .
+docker build --no-cache -f apps/api/Dockerfile --tag europe-west4-docker.pkg.dev/landlordhungary/landlord-repo/api:latest .
 if %errorlevel% neq 0 (
     echo ERROR: Docker build failed.
     pause

@@ -95,7 +95,11 @@ export default function Sidebar({
         )}
         <div className="flex items-center gap-2.5 min-w-0">
           {isSophia ? (
-            <Icon className="w-4 h-4 flex-shrink-0 text-coral-500 animate-pulse-slow" />
+            <img 
+              src="/sophia_avatar.png" 
+              alt="Sophia Avatar" 
+              className="w-5 h-5 rounded-full object-cover flex-shrink-0 border border-coral-300/30 dark:border-coral-500/30 shadow-[0_0_8px_rgba(255,107,107,0.3)] animate-[pulse_3s_ease-in-out_infinite]"
+            />
           ) : isTeam && userOrganizationLogo ? (
             <img 
               src={userOrganizationLogo} 
@@ -111,7 +115,7 @@ export default function Sidebar({
           )}
           <span className={`transition-all duration-300 overflow-hidden whitespace-nowrap ${
             collapsed ? 'w-0 opacity-0 group-hover/sidebar:w-auto group-hover/sidebar:opacity-100 group-hover/sidebar:ml-0.5' : 'w-auto opacity-100'
-          } ${isSophia && isActive ? 'bg-gradient-to-r from-coral-500 to-amber-500 bg-clip-text text-transparent font-semibold tracking-wide' : ''}`}>
+          } ${isSophia ? 'bg-gradient-to-r from-coral-500 to-amber-500 bg-clip-text text-transparent font-bold tracking-wide' : ''}`}>
             {label}
           </span>
         </div>

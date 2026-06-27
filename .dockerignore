@@ -1,0 +1,29 @@
+# Local node_modules
+node_modules/
+**/node_modules/
+
+# Next.js build output
+.next/
+**/.next/
+
+# NestJS build output
+dist/
+**/dist/
+
+# Turbo directories
+.turbo/
+**/.turbo/
+
+# Git metadata
+.git/
+.gitignore
+
+# Env configuration
+.env
+.env.local
+.env.*.local
+
+# Logs and system files
+*.log
+.DS_Store
+Thumbs.db

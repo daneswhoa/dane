@@ -1,0 +1,22 @@
+runConfig:
+  minInstances: 0
+  maxInstances: 5
+  cpu: 1
+  memoryMiB: 512
+
+env:
+  - variable: NEXT_PUBLIC_API_URL
+    value: https://landlord-api-1016907064838.europe-west4.run.app
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_APP_URL
+    value: https://landlordnl-dashboard.web.app
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+    value: AIzaSyDJRzobvHy83CKVxQeKjF7Y8ZxwEbCRCN4
+    availability:
+      - BUILD
+      - RUNTIME

@@ -2,7 +2,7 @@
 FROM node:20-alpine AS base
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
-RUN corepack enable
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 
 WORKDIR /app
 
@@ -20,11 +20,10 @@ RUN pnpm install --frozen-lockfile
 
 # --- Build Stage ---
 FROM base AS builder
-COPY --from=pruner /app/out/json/ .
-COPY --from=pruner /app/out/pnpm-lock.yaml ./
-COPY --from=installer /app/node_modules ./node_modules
+COPY --from=installer /app .
 COPY --from=pruner /app/out/full/ .
-RUN pnpm build --filter=api
+RUN find . -name "*.tsbuildinfo" -delete
+RUN pnpm --filter api build
 
 # --- Runner (Production) Stage ---
 FROM base AS runner
@@ -33,13 +32,11 @@ ENV NODE_ENV=production
 # Create non-root system user for security
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nestjs
-USER nestjs
+WORKDIR /app
 
-COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
-COPY --from=builder /app/apps/api/dist ./apps/api/dist
-COPY --from=builder /app/apps/api/package.json ./apps/api/package.json
-COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder --chown=nestjs:nodejs /app ./
+
+USER nestjs
 
 EXPOSE 4000
 ENV PORT=4000

@@ -89,7 +89,7 @@ export class TeamController {
       const orgName = owner[0]?.organizationName || 'Landlord.nl';
 
       // Construct invite link
-      const inviteLink = `http://localhost:3000/invite?code=${inviteCode}`;
+      const inviteLink = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/invite?code=${inviteCode}`;
 
       try {
         await this.emailService.sendEmail(

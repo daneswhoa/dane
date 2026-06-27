@@ -231,11 +231,11 @@ export class FinanceController {
 
       const isManager = user.role === 'manager';
       const returnUrl = isManager 
-        ? 'http://localhost:3000/finance?stripe=success' 
-        : 'http://localhost:3001/contractor/earnings?stripe=success';
+        ? `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/finance?stripe=success` 
+        : `${process.env.NEXT_PUBLIC_PORTAL_URL || 'http://localhost:3001'}/contractor/earnings?stripe=success`;
       const refreshUrl = isManager 
-        ? 'http://localhost:3000/finance?stripe=refresh' 
-        : 'http://localhost:3001/contractor/earnings?stripe=refresh';
+        ? `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/finance?stripe=refresh` 
+        : `${process.env.NEXT_PUBLIC_PORTAL_URL || 'http://localhost:3001'}/contractor/earnings?stripe=refresh`;
 
       // Create an account link for onboarding
       const accountLink = await stripe.accountLinks.create({

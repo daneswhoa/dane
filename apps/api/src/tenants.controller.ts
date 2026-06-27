@@ -312,7 +312,7 @@ export class TenantsController {
         const propCheck = await this.db.select({ name: schema.properties.name }).from(schema.properties).where(eq(schema.properties.id, body.propertyId)).limit(1);
         const propName = propCheck[0]?.name || 'your new home';
 
-        const inviteLink = `http://localhost:3000/invite?code=${inviteCode}`;
+        const inviteLink = `${process.env.NEXT_PUBLIC_PORTAL_URL || 'http://localhost:3001'}/invite?code=${inviteCode}`;
         const subject = `Your invitation to join ${orgName}`;
         const html = `
           <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 12px; background-color: #ffffff;">

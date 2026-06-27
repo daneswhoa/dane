@@ -141,11 +141,11 @@ export const auth = betterAuth({
   cookie: {
     // Shared across subdomains in production (e.g., .landlord.hu), undefined for localhost
     domain: process.env.COOKIE_DOMAIN || undefined,
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    sameSite: (process.env.NODE_ENV === 'production' || !!process.env.COOKIE_DOMAIN) ? 'none' : 'lax',
   },
   advanced: {
     // Force secure cookies in production, relax in dev
-    useSecureCookies: process.env.NODE_ENV === 'production',
+    useSecureCookies: process.env.NODE_ENV === 'production' || !!process.env.COOKIE_DOMAIN,
   },
 });
 export type Auth = typeof auth;

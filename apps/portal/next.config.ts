@@ -1,5 +1,6 @@
 import type { NextConfig } from 'next';
 
+// Trigger rebuild for custom domains env variables
 const nextConfig: NextConfig = {
   transpilePackages: ['@repo/ui', '@repo/types', '@repo/auth'],
   async rewrites() {

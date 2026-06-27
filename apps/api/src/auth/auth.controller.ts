@@ -51,6 +51,13 @@ export class AuthController {
     }
   }
 
+  @All('debug-headers')
+  async debugHeaders(@Req() req: Request) {
+    return {
+      headers: req.headers,
+    };
+  }
+
   @All('*path')
   async handleAuth(@Req() req: Request, @Res() res: Response) {
     return toNodeHandler(auth)(req, res);

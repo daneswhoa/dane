@@ -15,6 +15,10 @@ export default function DebugPage() {
   const [apiLoading, setApiLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
 
+  const [headersData, setHeadersData] = useState<any>(null);
+  const [headersLoading, setHeadersLoading] = useState(false);
+  const [headersError, setHeadersError] = useState<string | null>(null);
+
   useEffect(() => {
     if (typeof window !== 'undefined') {
       setCookieData(document.cookie);
@@ -36,6 +40,23 @@ export default function DebugPage() {
       setApiError(err.message || 'Failed to fetch session');
     } finally {
       setApiLoading(false);
+    }
+  };
+
+  const fetchDebugHeaders = async () => {
+    setHeadersLoading(true);
+    setHeadersError(null);
+    try {
+      const res = await fetch('/api/auth/debug-headers', { credentials: 'include' });
+      if (!res.ok) {
+        throw new Error(`HTTP Error ${res.status}: ${res.statusText}`);
+      }
+      const data = await res.json();
+      setHeadersData(data);
+    } catch (err: any) {
+      setHeadersError(err.message || 'Failed to fetch debug headers');
+    } finally {
+      setHeadersLoading(false);
     }
   };
 
@@ -243,13 +264,13 @@ export default function DebugPage() {
             API Diagnostics Console
           </h3>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             
             {/* Test 1: Fetch session from proxy */}
             <div className="bg-slate-950 p-4 rounded-xl border border-slate-850 space-y-3">
               <h4 className="text-xs font-semibold text-white">Proxy Request Check</h4>
               <p className="text-slate-400 text-[11px] leading-relaxed">
-                Fetches session from <code>/api/auth/get-session</code> (which Next.js proxies to the backend).
+                Fetches session from <code>/api/auth/get-session</code> (Next.js proxy).
               </p>
               <button
                 onClick={runDiagnostics}
@@ -265,7 +286,7 @@ export default function DebugPage() {
             <div className="bg-slate-950 p-4 rounded-xl border border-slate-850 space-y-3">
               <h4 className="text-xs font-semibold text-white">Client SDK Check</h4>
               <p className="text-slate-400 text-[11px] leading-relaxed">
-                Requests session using the client-side SDK (<code>authClient.getSession()</code>).
+                Requests session using client-side SDK (<code>authClient.getSession()</code>).
               </p>
               <button
                 onClick={fetchClientSession}
@@ -277,10 +298,26 @@ export default function DebugPage() {
               </button>
             </div>
 
+            {/* Test 3: Fetch debug-headers */}
+            <div className="bg-slate-950 p-4 rounded-xl border border-slate-850 space-y-3">
+              <h4 className="text-xs font-semibold text-white">Headers Checker</h4>
+              <p className="text-slate-400 text-[11px] leading-relaxed">
+                View all HTTP request headers that actually reach the backend server.
+              </p>
+              <button
+                onClick={fetchDebugHeaders}
+                disabled={headersLoading}
+                className="w-full py-2 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs font-bold rounded-lg transition"
+                id="btn-test-headers"
+              >
+                {headersLoading ? 'Requesting...' : 'View Backend Headers'}
+              </button>
+            </div>
+
           </div>
 
           {/* Log Outputs */}
-          {(apiResponse || apiError || directSessionData || directSessionError) && (
+          {(apiResponse || apiError || directSessionData || directSessionError || headersData || headersError) && (
             <div className="space-y-4 pt-2 border-t border-slate-800">
               <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Console Outputs</span>
               
@@ -306,6 +343,19 @@ export default function DebugPage() {
                   </div>
                   <pre className="p-3 bg-slate-950 rounded-lg border border-slate-900 font-mono text-[11px] overflow-x-auto max-h-[200px] text-slate-300 select-all">
                     {directSessionError ? `Error: ${directSessionError}` : JSON.stringify(directSessionData, null, 2)}
+                  </pre>
+                </div>
+              )}
+
+              {/* Headers output */}
+              {(headersData || headersError) && (
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1.5 text-xs text-amber-400 font-medium">
+                    <ArrowRight className="w-3.5 h-3.5" />
+                    Headers check Output (from Backend)
+                  </div>
+                  <pre className="p-3 bg-slate-950 rounded-lg border border-slate-900 font-mono text-[11px] overflow-x-auto max-h-[250px] text-slate-300 select-all">
+                    {headersError ? `Error: ${headersError}` : JSON.stringify(headersData, null, 2)}
                   </pre>
                 </div>
               )}

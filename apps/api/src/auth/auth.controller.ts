@@ -67,7 +67,50 @@ export class AuthController {
   @All('*path')
   async handleAuth(@Req() req: Request, @Res() res: Response) {
     console.log(`[Better Auth Request] ${req.method} ${req.url}`);
-    console.log(`[Better Auth Incoming Cookies] ${req.headers.cookie || '(None)'}`);
+    const cookieHeader = req.headers.cookie || '';
+    console.log(`[Better Auth Incoming Cookies] ${cookieHeader || '(None)'}`);
+    
+    // Self-healing mechanism for duplicate cookies (host-only vs wildcard)
+    const sessionTokenKeys = ['__Secure-better-auth.session_token', 'better-auth.session_token'];
+    let duplicateDetected = false;
+    for (const key of sessionTokenKeys) {
+      const tokens = cookieHeader.split(';').filter(c => c.trim().startsWith(`${key}=`));
+      if (tokens.length > 1) {
+        duplicateDetected = true;
+        break;
+      }
+    }
+
+    if (duplicateDetected) {
+      console.warn(`[Better Auth Conflict] Detected duplicate session_token cookies. Auto-clearing all variants to recover...`);
+      const cleanCookieDomain = process.env.COOKIE_DOMAIN 
+        ? process.env.COOKIE_DOMAIN.replace(/^['"]|['"]$/g, '').trim() 
+        : '';
+        
+      const clearHeaders = [
+        // Clear host-only non-secure
+        `better-auth.session_token=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax`,
+        `better-auth.session_data=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax`,
+        // Clear host-only secure
+        `__Secure-better-auth.session_token=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=None`,
+        `__Secure-better-auth.session_data=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=None`,
+      ];
+      
+      if (cleanCookieDomain) {
+        clearHeaders.push(
+          // Clear wildcard non-secure
+          `better-auth.session_token=; Max-Age=0; Domain=${cleanCookieDomain}; Path=/; HttpOnly; SameSite=Lax`,
+          `better-auth.session_data=; Max-Age=0; Domain=${cleanCookieDomain}; Path=/; HttpOnly; SameSite=Lax`,
+          // Clear wildcard secure
+          `__Secure-better-auth.session_token=; Max-Age=0; Domain=${cleanCookieDomain}; Path=/; HttpOnly; Secure; SameSite=None`,
+          `__Secure-better-auth.session_data=; Max-Age=0; Domain=${cleanCookieDomain}; Path=/; HttpOnly; Secure; SameSite=None`
+        );
+      }
+      
+      res.setHeader('Set-Cookie', clearHeaders);
+      res.status(401).json({ error: 'Session conflict detected. Cookies cleared. Please sign in again.' });
+      return;
+    }
     
     await toNodeHandler(auth)(req, res);
     

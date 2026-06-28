@@ -165,6 +165,10 @@ export class PropertySetupTool {
         if (prop.settings) {
           try {
             settingsObj = JSON.parse(prop.settings);
+            // Remove 'units' from settings to prevent confusing Sophia with outdated setup snapshot data
+            if (settingsObj.units) {
+              delete settingsObj.units;
+            }
           } catch (e) {
             settingsObj = { raw: prop.settings };
           }

@@ -8,9 +8,13 @@ import { DATABASE_CONNECTION } from './db/database.module';
 
 let storage: Storage | null = null;
 try {
-  storage = new Storage();
+  if (process.env.GCP_CREDENTIALS) {
+    storage = new Storage({ credentials: JSON.parse(process.env.GCP_CREDENTIALS) });
+  } else {
+    storage = new Storage();
+  }
 } catch (e) {
-  console.log('GCS not configured, will skip actual upload if no credentials.');
+  console.log('GCS not configured, will skip actual upload if no credentials.', e);
 }
 const bucketName = process.env.GCS_BUCKET_NAME || 'landlordnl-assets';
 

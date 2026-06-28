@@ -14,6 +14,7 @@ import { TeamController } from './team.controller';
 import { CampaignsController } from './campaigns.controller';
 import { SecurityController } from './security.controller';
 import { NotificationsController } from './notifications.controller';
+import { AnnouncementsController } from './announcements.controller';
 import { GcpTasksService } from './gcp-tasks.service';
 import { EmailService } from './email.service';
 
@@ -36,6 +37,7 @@ import { EmailService } from './email.service';
     CampaignsController,
     SecurityController,
     NotificationsController,
+    AnnouncementsController,
   ],
   providers: [
     GcpTasksService,

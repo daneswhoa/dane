@@ -24,7 +24,8 @@ import {
   Send,
   Cpu,
   ClipboardList,
-  MessageCircle
+  MessageCircle,
+  Megaphone
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -79,7 +80,7 @@ export default function Sidebar({
 
   // Auto-open communication menu if a communication tab is active
   useEffect(() => {
-    if (['inbox', 'broadcasts', 'automations', 'templates'].includes(activeTab)) {
+    if (['announcements', 'broadcasts', 'automations', 'templates'].includes(activeTab)) {
       setCommunicationOpen(true);
     }
   }, [activeTab]);
@@ -405,9 +406,7 @@ export default function Sidebar({
                   collapsed && !mobileOpen ? 'opacity-0 group-hover/sidebar:opacity-100' : 'opacity-100'
                 }`}></div>
                 
-                {renderSubLink('inbox', 'Inbox', InboxIcon, {
-                  badge: '12'
-                })}
+                {renderSubLink('announcements', 'Announcements', Megaphone)}
                 
                 {renderSubLink('broadcasts', 'Email Broadcasts', Send, {
                   dot: true

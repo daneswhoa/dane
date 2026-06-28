@@ -156,7 +156,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     if (path.startsWith('/finance/expenses')) return 'expenses';
     if (path.startsWith('/finance/invoices')) return 'invoices';
     if (path.startsWith('/finance/wallet')) return 'wallet';
-    if (path.startsWith('/communication/inbox')) return 'inbox';
+    if (path.startsWith('/communication/announcements')) return 'announcements';
     if (path.startsWith('/communication/broadcasts')) return 'broadcasts';
     if (path.startsWith('/communication/automations')) return 'automations';
     if (path.startsWith('/communication/templates')) return 'templates';
@@ -176,7 +176,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     if (tabId === 'expenses') router.push('/finance/expenses');
     else if (tabId === 'invoices') router.push('/finance/invoices');
     else if (tabId === 'wallet') router.push('/finance/wallet');
-    else if (tabId === 'inbox') router.push('/communication/inbox');
+    else if (tabId === 'announcements') router.push('/communication/announcements');
     else if (tabId === 'broadcasts') router.push('/communication/broadcasts');
     else if (tabId === 'automations') router.push('/communication/automations');
     else if (tabId === 'templates') router.push('/communication/templates');
@@ -374,8 +374,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         return ['Operations', 'Maintenance Hub'];
       case 'contractors':
         return ['Operations', 'Contractors'];
-      case 'inbox':
-        return ['Operations', 'Communication', 'Inbox'];
+      case 'announcements':
+        return ['Operations', 'Communication', 'Announcements'];
       case 'broadcasts':
         return ['Operations', 'Communication', 'Email Broadcasts'];
       case 'automations':

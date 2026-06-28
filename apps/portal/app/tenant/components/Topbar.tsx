@@ -30,7 +30,7 @@ export default function Topbar({ isDark, onToggleTheme, onActionClick }: TopbarP
       case 'profile': return 'My Profile';
       case 'payments': return 'Payments & Invoices';
       case 'maintenance': return 'Maintenance';
-      case 'communications': return 'Communications';
+      case 'announcements': return 'Announcements';
       default: return 'Overview';
     }
   };

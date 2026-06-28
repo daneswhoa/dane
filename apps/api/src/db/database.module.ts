@@ -99,6 +99,25 @@ export class DatabaseModule implements OnModuleInit {
       `);
       console.log('Table notifications is ready.');
 
+      console.log('Ensuring announcements table exists...');
+      await this.db.execute(sql`
+        CREATE TABLE IF NOT EXISTS announcements (
+          id VARCHAR(255) PRIMARY KEY,
+          owner_id VARCHAR(255) NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+          title VARCHAR(255) NOT NULL,
+          content TEXT NOT NULL,
+          audience_type VARCHAR(50) NOT NULL,
+          target_property_id VARCHAR(255) REFERENCES properties(id) ON DELETE SET NULL,
+          arrears_filter VARCHAR(50) NOT NULL,
+          sent_count INTEGER NOT NULL DEFAULT 0,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
+        );
+      `);
+      await this.db.execute(sql`
+        CREATE INDEX IF NOT EXISTS announcements_owner_id_idx ON announcements (owner_id);
+      `);
+      console.log('Table announcements is ready.');
+
       console.log('Ensuring todos table exists...');
       await this.db.execute(sql`
         CREATE TABLE IF NOT EXISTS todos (

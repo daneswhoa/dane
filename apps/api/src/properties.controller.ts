@@ -106,7 +106,17 @@ export class PropertiesController {
 
     try {
       const { Storage } = require('@google-cloud/storage');
-      const storage = new Storage();
+      let storage;
+      if (process.env.GCP_CREDENTIALS) {
+        try {
+          storage = new Storage({ credentials: JSON.parse(process.env.GCP_CREDENTIALS) });
+        } catch (e) {
+          console.error('Failed to parse GCS credentials from GCP_CREDENTIALS env:', e);
+          storage = new Storage();
+        }
+      } else {
+        storage = new Storage();
+      }
       const bucket = storage.bucket(bucketName);
       const fileName = `properties/${req.user.id}-${Date.now()}-${file.originalname}`;
       const blob = bucket.file(fileName);

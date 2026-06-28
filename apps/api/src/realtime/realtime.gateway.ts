@@ -238,6 +238,9 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
         }
       }
 
+      // Stream finished successfully, signal idle state
+      client.emit('sophia-status', { status: 'idle', message: 'Ready' });
+
       // 4. Save thread to database if conversationId exists and stream wasn't aborted
       if (data.conversationId && !abortController.signal.aborted) {
         const sophiaMsgObj = {

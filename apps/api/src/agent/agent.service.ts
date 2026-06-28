@@ -6,6 +6,8 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { toolsRegistry, getOpenAITools, getGeminiTools } from './tool-registry';
 import { DATABASE_CONNECTION } from '../db/database.module';
+import * as schema from '../db/schema';
+import { eq } from 'drizzle-orm';
 
 export interface AgentEvent {
   type: 'text' | 'status' | 'action_start' | 'action_end' | 'widget' | 'error';
@@ -137,6 +139,38 @@ When a file is attached, you will be notified of its presence. Call 'parse_and_v
 If the user sends you a voice/audio message, listen to it directly. It will be provided to you as audio data. Respond to the spoken instructions directly.`;
 
     if (userRole === 'tenant') {
+      let tenantInfoPrompt = '';
+      try {
+        const userRec = await this.db.select().from(schema.users).where(eq(schema.users.id, userId)).limit(1);
+        const name = userRec[0]?.name || 'Resident';
+        
+        const unitRecs = await this.db.select().from(schema.units).where(eq(schema.units.tenantId, userId)).limit(1);
+        if (unitRecs.length > 0) {
+          const unit = unitRecs[0];
+          const propRecs = await this.db.select().from(schema.properties).where(eq(schema.properties.id, unit.propertyId)).limit(1);
+          const propertyName = propRecs[0]?.name || 'our property';
+          const propertyAddress = propRecs[0]?.address || 'our address';
+          
+          tenantInfoPrompt = `\n\n**YOU ARE TALKING TO:**
+- **Name:** ${name}
+- **Property:** ${propertyName}
+- **Property Address:** ${propertyAddress}
+- **Unit:** Unit ${unit.label}
+- **Rent:** €${unit.rent}/month
+- **Deposit:** €${unit.deposit}
+- **Recurring monthly fees:** €${unit.recurringFees} (${unit.recurringFeeDetails || 'None'})
+- **Arrears (Due balance):** €${unit.arrears}
+
+Greet them by name if appropriate. Use these details to answer queries about their rent, unit, property, and billing without needing to call tools unless they want to see live invoice lists or create tickets.`;
+        } else {
+          tenantInfoPrompt = `\n\n**YOU ARE TALKING TO:**
+- **Name:** ${name}
+- **Unit status:** Not currently assigned to a unit.`;
+        }
+      } catch (dbErr) {
+        this.logger.error('Failed to fetch tenant info for agent system prompt', dbErr);
+      }
+
       systemPrompt = `You are Sophia, an AI resident assistant. Your personality is friendly, helpful, warm, polite, and female. You speak directly to the tenant/resident to assist them with their living experience.
 Always keep messages completely free of jargon and keep them concise and supportive.
 
@@ -144,11 +178,11 @@ Always keep messages completely free of jargon and keep them concise and support
 
 You can help the tenant with:
 - Understanding invoices received: Use 'getTenantInvoices' to pull their invoice ledger (pass their tenantId if known, or empty arguments to let the system default to their ID if possible). Note: The system currently links tools via the agent context.
-- Creating maintenance requests: Use 'manageMaintenanceTickets' with action 'create' to submit a maintenance request. Ask them for a description, urgency, and category.
+- Creating maintenance requests: Use 'manageMaintenanceTickets' with action 'create' to submit a maintenance request. DO NOT force the user to give you the category, urgency, or structured details. You must autonomously infer the urgency (e.g. 'high' for active leaks, no heating/power, lockouts; 'medium' for broken appliances or non-critical plumbing issues; 'low' for minor issues), choose a suitable category (e.g., 'plumbing', 'electrical', 'appliance', 'structural', 'cleaning', 'pest', 'other'), and write a professional ticket description based on their raw message. Call the tool immediately once you understand the problem, and then confirm the ticket details to the resident.
 - Checking due invoices: Again, use 'getTenantInvoices'.
 - Checking maintenance request status: Use 'manageMaintenanceTickets' with action 'fetch' to pull their recent requests.
 If they ask for lease documents or things you cannot do, politely let them know your current capabilities.
-If the user sends you a voice/audio message, listen to it directly and respond.`;
+If the user sends you a voice/audio message, listen to it directly and respond.${tenantInfoPrompt}`;
     }
 
     // Assemble messages list
@@ -255,6 +289,12 @@ If the user sends you a voice/audio message, listen to it directly and respond.`
             provider = 'deepseek';
             this.logger.warn(`Gemini completely failed. Falling back to DeepSeek.`);
             yield { type: 'status', payload: { status: 'thinking', message: 'Gemini unavailable. Re-routing to DeepSeek...' } };
+            
+            // Push a critical instruction to the message history so DeepSeek knows Gemini failed
+            messages.push({
+              role: 'system',
+              content: 'CRITICAL SYSTEM NOTICE: The primary Gemini engine failed to run (likely due to missing credentials, service account setup, or environment limitations). You are running as the backup assistant. Please politely inform the user that because the primary Gemini engine is currently unavailable, you are unable to run tools, parse spreadsheet attachments, or modify properties/units in the database. Tell them what happened, apologize, and offer to help with general questions instead.'
+            });
             continue;
           }
         }
@@ -284,22 +324,26 @@ If the user sends you a voice/audio message, listen to it directly and respond.`
       return 'gemini'; // Gemini has native multimodal audio capabilities
     }
     
+    if (fileData && fileData.base64Data && fileData.base64Data.trim() !== '') {
+      return 'gemini'; // Gemini handles file attachments
+    }
+
     const query = userMessage.toLowerCase();
-    if (
-      (fileData && fileData.base64Data && fileData.base64Data.trim() !== '') ||
-      query.includes('excel') ||
-      query.includes('spreadsheet') ||
-      query.includes('sheet') ||
-      query.includes('visual') ||
-      query.includes('chart') ||
-      query.includes('graph') ||
-      query.includes('parse')
-    ) {
+    
+    // Keywords indicating dynamic database operations, setup, tool calls, or spreadsheet visualization
+    const toolKeywords = [
+      'excel', 'spreadsheet', 'sheet', 'csv', 'visualize', 'chart', 'graph', 'parse',
+      'create', 'add', 'setup', 'update', 'edit', 'change', 'modify', 'new property',
+      'property', 'properties', 'unit', 'units', 'rent', 'deposit', 'fee', 'fees'
+    ];
+
+    const needsToolCall = toolKeywords.some(keyword => query.includes(keyword));
+    if (needsToolCall) {
       return 'gemini';
     }
     
-    // Defaulting to gemini instead of deepseek because gemini handles tool calling much more reliably
-    return 'gemini';
+    // Default to DeepSeek for general manager conversations/queries
+    return 'deepseek';
   }
 
   /**

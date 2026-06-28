@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { Send, Bot, User, Loader2, Sparkles, Plus, Trash2, MessageSquare, Square, Menu, X } from 'lucide-react';
+import { FormattedMessage } from '../components/SophiaMessageFormatter';
 
 const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -128,7 +129,11 @@ export default function TenantSophiaPage() {
   };
 
   useEffect(() => {
-    const s = io(apiBase, { withCredentials: true, path: '/socket.io' });
+    const s = io(`${apiBase}/events`, {
+      withCredentials: true,
+      transports: ['websocket'],
+      forceNew: true,
+    });
 
     s.on('connect', () => {
       console.log('Connected to Sophia socket in tenant portal');
@@ -171,6 +176,17 @@ export default function TenantSophiaPage() {
       }
     });
 
+    s.on('sophia-token-reset', () => {
+      setMessages((prev) => {
+        const lastMsg = prev[prev.length - 1];
+        if (lastMsg && lastMsg.sender === 'sophia') {
+          return prev.slice(0, -1);
+        }
+        return prev;
+      });
+      setIsTyping(true);
+    });
+
     s.on('sophia-error', (payload: { message: string }) => {
       setIsTyping(false);
       setMessages((prev) => [
@@ -195,6 +211,11 @@ export default function TenantSophiaPage() {
     });
 
     return () => {
+      s.off('connect');
+      s.off('sophia-token');
+      s.off('sophia-token-reset');
+      s.off('sophia-status');
+      s.off('sophia-error');
       s.disconnect();
     };
   }, []);
@@ -343,14 +364,13 @@ export default function TenantSophiaPage() {
                       <span className="text-[10px] font-bold text-paper-900 dark:text-white">{isSophia ? 'Sophia' : 'You'}</span>
                       <span className="text-[9px] text-paper-400 dark:text-ink-500">{msg.timestamp}</span>
                     </div>
-                    <div className={`px-4 py-3 rounded-2xl text-sm leading-relaxed shadow-sm ${isSophia ? 'bg-white dark:bg-ink-800 text-paper-800 dark:text-ink-100 border border-paper-200 dark:border-ink-700 rounded-tl-sm' : 'bg-coral-500 text-white rounded-tr-sm'}`}>
-                      {msg.text.split('\\n').map((line, i) => (
-                        <React.Fragment key={i}>
-                          {line}
-                          {i !== msg.text.split('\\n').length - 1 && <br />}
-                        </React.Fragment>
-                      ))}
-                      {msg.isDrafting && <span className="inline-block w-1.5 h-4 ml-1 bg-coral-400 animate-pulse align-middle" />}
+                    <div className={`px-4 py-3 rounded-2xl shadow-sm ${isSophia ? 'bg-white dark:bg-ink-800 text-paper-800 dark:text-ink-100 border border-paper-200 dark:border-ink-700 rounded-tl-sm' : 'bg-coral-500 text-white rounded-tr-sm'}`}>
+                      {isSophia ? (
+                        <FormattedMessage text={msg.text} />
+                      ) : (
+                        <span className="whitespace-pre-wrap">{msg.text}</span>
+                      )}
+                      {msg.isDrafting && <span className="inline-block w-1.5 h-4 mt-1.5 bg-coral-400 animate-pulse align-middle" />}
                     </div>
                   </div>
                 </div>

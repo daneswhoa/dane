@@ -342,6 +342,20 @@ export const notifications = pgTable('notifications', {
   index('notifications_user_id_idx').on(table.userId),
 ]);
 
+export const announcements = pgTable('announcements', {
+  id: varchar('id', { length: 255 }).primaryKey(),
+  ownerId: varchar('owner_id', { length: 255 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  title: varchar('title', { length: 255 }).notNull(),
+  content: text('content').notNull(),
+  audienceType: varchar('audience_type', { length: 50 }).notNull(), // 'all' | 'property'
+  targetPropertyId: varchar('target_property_id', { length: 255 }).references(() => properties.id, { onDelete: 'set null' }),
+  arrearsFilter: varchar('arrears_filter', { length: 50 }).notNull(), // 'all' | 'with_arrears' | 'with_arrears_due_date' | 'without_arrears'
+  sentCount: integer('sent_count').default(0).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => [
+  index('announcements_owner_id_idx').on(table.ownerId),
+]);
+
 export const userNotes = pgTable('user_notes', {
   id: varchar('id', { length: 255 }).primaryKey(),
   userId: varchar('user_id', { length: 255 }).notNull().references(() => users.id, { onDelete: 'cascade' }),

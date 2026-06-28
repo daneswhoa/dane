@@ -135,28 +135,30 @@ export default function Sidebar({ profile }: SidebarProps) {
           <p className="text-[10px] uppercase font-semibold tracking-wider text-paper-400 dark:text-ink-400">Community</p>
         </div>
 
-        {/* Communications Tab */}
+        {/* Disabled Communications Tab */}
+        <div className="w-full flex items-center justify-between px-2 py-1.5 rounded-md font-medium text-paper-400 dark:text-ink-500 opacity-55 cursor-not-allowed select-none">
+          <div className="flex items-center gap-2">
+            <MessageSquare className="w-4 h-4" /> Communications
+          </div>
+          <span className="text-[9px] bg-paper-100 dark:bg-ink-900 border border-paper-200 dark:border-ink-800 px-1 py-0.5 rounded leading-none">Locked</span>
+        </div>
+        
+        {/* Active Announcements Tab */}
         <Link 
-          href="/tenant/communications"
+          href="/tenant/announcements"
           className={`w-full flex items-center justify-between px-2 py-1.5 rounded-md font-medium trans-subtle relative group cursor-pointer ${
-            activeTab === 'communications' 
+            activeTab === 'announcements' 
               ? 'bg-coral-50 dark:bg-coral-500/10 text-coral-600 dark:text-coral-400' 
               : 'text-paper-700 dark:text-ink-200 hover:bg-paper-200 dark:hover:bg-ink-800'
           }`}
         >
           <div className="flex items-center gap-2">
-            {activeTab === 'communications' && (
+            {activeTab === 'announcements' && (
               <span className="absolute left-[-12px] top-1/2 -translate-y-1/2 w-1 h-1 rounded-full bg-coral-500 shadow-[0_0_8px_rgba(255,107,107,0.8)] animate-pulse-slow"></span>
             )}
-            <MessageSquare className="w-4 h-4" /> Communications
+            <Megaphone className="w-4 h-4" /> Announcements
           </div>
-          <span className="text-[10px] bg-coral-100 dark:bg-coral-500/20 border border-coral-200 dark:border-coral-500/30 text-coral-700 dark:text-coral-300 px-1.5 py-0.5 rounded leading-none">2 New</span>
         </Link>
-        
-        {/* Inactive Announcements */}
-        <div className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-paper-700 dark:text-ink-200 hover:bg-paper-200 dark:hover:bg-ink-800 trans-subtle opacity-60 cursor-not-allowed">
-          <Megaphone className="w-4 h-4" /> Announcements
-        </div>
       </nav>
 
       {/* Tenant User Profile */}

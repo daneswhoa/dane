@@ -208,6 +208,16 @@ function PropertyUnitCardList({ headers, rows }: { headers: string[]; rows: stri
           }
         }
 
+        const extraDetails: { label: string; value: string }[] = [];
+        headers.forEach((header, colIdx) => {
+          if (colIdx !== propColIdx && colIdx !== statusColIdx && colIdx !== unitsColIdx) {
+            const val = row[colIdx];
+            if (val && val.trim() && val !== '-' && val !== 'N/A') {
+              extraDetails.push({ label: header, value: val });
+            }
+          }
+        });
+
         return (
           <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 bg-white/40 dark:bg-ink-900/40 border border-paper-200 dark:border-ink-800 rounded-xl gap-3 shadow-sm hover:border-coral-500/25 transition-all">
             <div className="flex items-center gap-3">
@@ -238,6 +248,16 @@ function PropertyUnitCardList({ headers, rows }: { headers: string[]; rows: stri
                   <div className="flex items-center gap-1 text-[10px] text-paper-400 dark:text-ink-500 mt-0.5 font-semibold">
                     <MapPin className="w-3 h-3 text-paper-400 dark:text-ink-500" />
                     <span>{location}</span>
+                  </div>
+                )}
+                {extraDetails.length > 0 && (
+                  <div className="mt-1.5 flex flex-wrap gap-x-2 gap-y-1 text-[10px] text-paper-500 dark:text-ink-400 font-medium">
+                    {extraDetails.map((detail, dIdx) => (
+                      <div key={dIdx} className="flex items-center gap-1 bg-paper-100/50 dark:bg-ink-950/30 px-2 py-0.5 rounded-md border border-paper-200/20 dark:border-ink-800/10">
+                        <span className="font-semibold text-paper-400 dark:text-ink-500">{detail.label}:</span>
+                        <span className="text-paper-700 dark:text-ink-300">{detail.value}</span>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>

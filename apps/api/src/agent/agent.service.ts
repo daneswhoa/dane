@@ -69,7 +69,7 @@ export class AgentService {
 
     // 3. Initialize GoogleGenAI client for Gemini Enterprise
     const projectId = this.configService.get<string>('GCS_PROJECT_ID');
-    this.geminiModel = this.configService.get<string>('GEMINI_MODEL') || 'gemini-3.5-flash';
+    this.geminiModel = this.configService.get<string>('GEMINI_MODEL') || 'gemini-1.5-pro';
     this.googleGenAI = new GoogleGenAI({
       enterprise: true,
       project: projectId,

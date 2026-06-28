@@ -72,6 +72,19 @@ export default function TenantSophiaPage() {
       }
     });
 
+    s.on('sophia-error', (payload: { message: string }) => {
+      setIsTyping(false);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: String(Date.now()),
+          sender: 'sophia',
+          text: `Error: ${payload.message}`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        }
+      ]);
+    });
+
     setSocket(s);
 
     return () => {

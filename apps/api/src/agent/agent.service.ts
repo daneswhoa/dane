@@ -271,7 +271,9 @@ If the user sends you a voice/audio message, listen to it directly and respond.`
     ) {
       return 'gemini';
     }
-    return 'deepseek';
+    
+    // Defaulting to gemini instead of deepseek because gemini handles tool calling much more reliably
+    return 'gemini';
   }
 
   /**

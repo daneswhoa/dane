@@ -74,7 +74,7 @@ export class PropertiesController {
           address: prop.address || 'No Address',
           type: 'Multi-Family',
           avgRent: `$${avgRent.toLocaleString()}/mo Avg`,
-          image: prop.photoUrl || 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&q=80&w=400&h=250',
+          image: prop.photoUrl || (prop.unitsCount > 1 ? '/default_apartment.png' : '/default_house.png'),
           units: prop.unitsCount || 0,
           occupancy: `${occupancyRate}%`,
           tickets: 0,

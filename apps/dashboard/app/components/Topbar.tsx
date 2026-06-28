@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChevronRight, Search, Sun, Moon, Plus, Sparkles, History, ArrowUpRight, Lock, UserPlus, QrCode, DownloadCloud } from 'lucide-react';
+import { ChevronRight, Search, Sun, Moon, Plus, Sparkles, History, ArrowUpRight, Lock, UserPlus, QrCode, DownloadCloud, Menu } from 'lucide-react';
 import NotificationPanel from './NotificationPanel';
 
 interface TopbarProps {
@@ -9,6 +9,7 @@ interface TopbarProps {
   onToggleTheme: () => void;
   activeTab: string;
   crumbs?: string[];
+  onToggleMobileSidebar?: () => void;
 }
 
 export default function Topbar({
@@ -17,7 +18,8 @@ export default function Topbar({
   isDark,
   onToggleTheme,
   activeTab,
-  crumbs
+  crumbs,
+  onToggleMobileSidebar
 }: TopbarProps) {
   const isFinanceTab = ['ledger', 'invoices', 'wallet'].includes(activeTab);
   const isSophiaTab = activeTab === 'sophia';
@@ -29,6 +31,15 @@ export default function Topbar({
     <header className="h-12 bg-white/80 dark:bg-ink-950/80 backdrop-blur-md border-b border-paper-200 dark:border-ink-800 flex items-center justify-between px-4 sticky top-0 z-10 transition-colors duration-200">
       {/* Breadcrumbs / Sophia Status */}
       <div className="flex items-center gap-2 text-paper-700 dark:text-ink-200">
+        {onToggleMobileSidebar && (
+          <button
+            onClick={onToggleMobileSidebar}
+            className="md:hidden p-1 mr-1 rounded hover:bg-paper-250 dark:hover:bg-ink-800 text-paper-500 dark:text-ink-400"
+            title="Toggle Sidebar"
+          >
+            <Menu className="w-4 h-4" />
+          </button>
+        )}
         {isSophiaTab ? (
           <div className="flex items-center gap-2 bg-coral-50 dark:bg-coral-500/10 px-2 py-1 rounded-md border border-coral-100 dark:border-coral-500/20">
             <div className="relative flex items-center justify-center">

@@ -132,7 +132,7 @@ export default function PropertyDetailPage() {
         {/* Photo */}
         <div className="md:w-1/3 h-48 md:h-auto relative bg-paper-100 dark:bg-ink-950">
           <img 
-            src={property.photoUrl || 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&q=80&w=400&h=250'} 
+            src={property.photoUrl || (property.unitsCount > 1 ? '/default_apartment.png' : '/default_house.png')} 
             alt={property.name} 
             className="w-full h-full object-cover"
           />

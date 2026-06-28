@@ -98,6 +98,22 @@ export class DatabaseModule implements OnModuleInit {
         CREATE INDEX IF NOT EXISTS notifications_user_id_idx ON notifications (user_id);
       `);
       console.log('Table notifications is ready.');
+
+      console.log('Ensuring todos table exists...');
+      await this.db.execute(sql`
+        CREATE TABLE IF NOT EXISTS todos (
+          id VARCHAR(255) PRIMARY KEY,
+          user_id VARCHAR(255) NOT NULL,
+          title VARCHAR(255) NOT NULL,
+          due_date TIMESTAMP WITH TIME ZONE NOT NULL,
+          is_completed BOOLEAN NOT NULL DEFAULT FALSE,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
+        );
+      `);
+      await this.db.execute(sql`
+        CREATE INDEX IF NOT EXISTS todos_user_id_idx ON todos (user_id);
+      `);
+      console.log('Table todos is ready.');
     } catch (err) {
       console.error('Failed to auto-create tables:', err);
     }

@@ -189,6 +189,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [isDark, setIsDark] = useState(true);
   const [loadingFact, setLoadingFact] = useState('');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [isProfileSettingsOpen, setIsProfileSettingsOpen] = useState(false);
 
   // Sync initial theme
@@ -414,6 +415,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         userOrganizationName={(session.user as any)?.organizationName}
         userOrganizationLogo={(session.user as any)?.image}
         metrics={metrics}
+        mobileOpen={mobileSidebarOpen}
+        onCloseMobile={() => setMobileSidebarOpen(false)}
       />
       <main className="flex-1 min-w-0 flex flex-col relative h-screen overflow-y-auto">
         <Topbar
@@ -423,6 +426,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           onToggleTheme={toggleTheme}
           activeTab={activeTab}
           crumbs={crumbs}
+          onToggleMobileSidebar={() => setMobileSidebarOpen(!mobileSidebarOpen)}
         />
         <div className="flex-1 overflow-y-auto">
           {children}

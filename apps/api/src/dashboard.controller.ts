@@ -1,7 +1,7 @@
-import { Controller, Post, Body, UseInterceptors, UploadedFile, BadRequestException, UseGuards, Req, Inject } from '@nestjs/common';
+import { Controller, Post, Body, UseInterceptors, UploadedFile, BadRequestException, UseGuards, Req, Inject, Get, Patch, Delete, Param } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { users } from './db/schema';
-import { eq } from 'drizzle-orm';
+import { users, todos } from './db/schema';
+import { eq, and, desc } from 'drizzle-orm';
 import { Storage } from '@google-cloud/storage';
 import { SessionGuard } from './auth/auth.guard';
 import { DATABASE_CONNECTION } from './db/database.module';
@@ -75,5 +75,61 @@ export class DashboardController {
     await this.db.update(users).set(updateData).where(eq(users.id, sessionUserId));
 
     return { success: true, logoUrl, message: 'Organization setup successfully' };
+  }
+
+  @Get('todos')
+  async getTodos(@Req() req: any) {
+    const userId = req.user.id;
+    return this.db
+      .select()
+      .from(todos)
+      .where(eq(todos.userId, userId))
+      .orderBy(desc(todos.createdAt));
+  }
+
+  @Post('todos')
+  async createTodo(@Req() req: any, @Body() body: { title: string; dueDate: string }) {
+    const userId = req.user.id;
+    if (!body.title || !body.dueDate) {
+      throw new BadRequestException('Title and dueDate are required.');
+    }
+    const todoId = 'todo-' + Math.random().toString(36).substring(2, 9);
+    await this.db.insert(todos).values({
+      id: todoId,
+      userId,
+      title: body.title,
+      dueDate: new Date(body.dueDate),
+      isCompleted: false
+    });
+    return { success: true, id: todoId };
+  }
+
+  @Patch('todos/:id')
+  async toggleTodo(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body() body: { isCompleted?: boolean; title?: string }
+  ) {
+    const userId = req.user.id;
+    const updateData: any = {};
+    if (body.isCompleted !== undefined) updateData.isCompleted = body.isCompleted;
+    if (body.title !== undefined) updateData.title = body.title;
+
+    await this.db
+      .update(todos)
+      .set(updateData)
+      .where(and(eq(todos.id, id), eq(todos.userId, userId)));
+
+    return { success: true };
+  }
+
+  @Delete('todos/:id')
+  async deleteTodo(@Req() req: any, @Param('id') id: string) {
+    const userId = req.user.id;
+    await this.db
+      .delete(todos)
+      .where(and(eq(todos.id, id), eq(todos.userId, userId)));
+
+    return { success: true };
   }
 }

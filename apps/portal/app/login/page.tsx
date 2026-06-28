@@ -175,7 +175,7 @@ function LoginForm() {
     setIsLoading(true);
 
     try {
-      await (authClient as any).forgetPassword({
+      await authClient.requestPasswordReset({
         email,
         redirectTo: `${window.location.origin}/reset-password`,
       }, {

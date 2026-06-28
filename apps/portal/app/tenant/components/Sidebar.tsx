@@ -12,7 +12,8 @@ import {
   FileText, 
   MessageSquare, 
   Megaphone, 
-  ChevronsUpDown 
+  ChevronsUpDown,
+  Sparkles
 } from 'lucide-react';
 import { TenantProfile } from '../types';
 
@@ -113,10 +114,22 @@ export default function Sidebar({ profile }: SidebarProps) {
           <span className="text-[10px] bg-paper-200 dark:bg-ink-800 border border-paper-300 dark:border-ink-700 text-paper-600 dark:text-ink-300 px-1.5 py-0.5 rounded leading-none">1 Open</span>
         </Link>
 
-        {/* Inactive Lease Docs */}
-        <div className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-paper-700 dark:text-ink-200 hover:bg-paper-200 dark:hover:bg-ink-800 trans-subtle opacity-60 cursor-not-allowed">
-          <FileText className="w-4 h-4" /> Lease Documents
-        </div>
+        {/* Sophia AI Assistant */}
+        <Link 
+          href="/tenant/sophia"
+          className={`w-full flex items-center justify-between px-2 py-1.5 rounded-md font-medium trans-subtle relative group cursor-pointer ${
+            activeTab === 'sophia' 
+              ? 'bg-coral-50 dark:bg-coral-500/10 text-coral-600 dark:text-coral-400' 
+              : 'text-paper-700 dark:text-ink-200 hover:bg-paper-200 dark:hover:bg-ink-800'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {activeTab === 'sophia' && (
+              <span className="absolute left-[-12px] top-1/2 -translate-y-1/2 w-1 h-1 rounded-full bg-coral-500 shadow-[0_0_8px_rgba(255,107,107,0.8)] animate-pulse-slow"></span>
+            )}
+            <Sparkles className="w-4 h-4 text-coral-500" /> Sophia AI
+          </div>
+        </Link>
         
         <div className="pt-3 pb-1 px-2">
           <p className="text-[10px] uppercase font-semibold tracking-wider text-paper-400 dark:text-ink-400">Community</p>

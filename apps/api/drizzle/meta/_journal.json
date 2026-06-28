@@ -71,6 +71,13 @@
       "when": 1782561712277,
       "tag": "0009_sour_turbo",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1782617772738,
+      "tag": "0010_closed_zuras",
+      "breakpoints": true
     }
   ]
 }

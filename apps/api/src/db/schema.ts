@@ -387,6 +387,17 @@ export const leases = pgTable('leases', {
   index('leases_unit_id_idx').on(table.unitId),
 ]);
 
+export const todos = pgTable('todos', {
+  id: varchar('id', { length: 255 }).primaryKey(),
+  userId: varchar('user_id', { length: 255 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  title: varchar('title', { length: 255 }).notNull(),
+  dueDate: timestamp('due_date').notNull(),
+  isCompleted: boolean('is_completed').default(false).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => [
+  index('todos_user_id_idx').on(table.userId),
+]);
+
 
 
 

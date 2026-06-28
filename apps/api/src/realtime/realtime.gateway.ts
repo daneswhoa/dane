@@ -10,6 +10,7 @@ import {
 import { Server, Socket } from 'socket.io';
 import { auth } from '../auth/better-auth';
 import { AgentService } from '../agent/agent.service';
+import { AgentMemoryService } from '../agent/agent-memory.service';
 
 @WebSocketGateway({
   cors: {
@@ -22,11 +23,15 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   @WebSocketServer()
   server!: Server;
 
-  constructor(private readonly agentService: AgentService) {}
+  constructor(
+    private readonly agentService: AgentService,
+    private readonly agentMemoryService: AgentMemoryService
+  ) {}
 
   // Map user ID to set of active socket IDs
   private userSockets = new Map<string, Set<string>>();
-
+  // Map socket client ID to active stream AbortController
+  private activeStreams = new Map<string, AbortController>();
 
   async handleConnection(client: Socket) {
     try {
@@ -64,6 +69,12 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   handleDisconnect(client: Socket) {
+    // Clean up active streams
+    if (this.activeStreams.has(client.id)) {
+      this.activeStreams.get(client.id)!.abort();
+      this.activeStreams.delete(client.id);
+    }
+
     const userId = client.data.userId;
     if (userId && this.userSockets.has(userId)) {
       const sockets = this.userSockets.get(userId)!;
@@ -90,10 +101,27 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
     this.server.emit(event, payload);
   }
 
+  @SubscribeMessage('sophia-stop')
+  handleSophiaStop(@ConnectedSocket() client: Socket) {
+    if (this.activeStreams.has(client.id)) {
+      this.activeStreams.get(client.id)!.abort();
+      this.activeStreams.delete(client.id);
+      console.log(`Sophia stream aborted on user request for client: ${client.id}`);
+      client.emit('sophia-status', { status: 'idle', message: 'Interrupted by user' });
+    }
+  }
+
   @SubscribeMessage('sophia-message')
   async handleSophiaMessage(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { message: string; conversationId?: number; navigationHistory?: any[] }
+    @MessageBody() data: {
+      message: string;
+      conversationId?: number;
+      conversationHistory?: { role: 'user' | 'assistant'; content: string }[];
+      fileData?: { base64Data: string; fileName: string };
+      audioData?: { base64Data: string; mimeType: string };
+      duration?: number;
+    }
   ) {
     let userId = client.data.userId;
     let role = client.data.role;
@@ -126,21 +154,111 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
       return;
     }
 
-    if (!data || !data.message) {
+    if (!data || (!data.message && !data.audioData)) {
       client.emit('sophia-error', { message: 'Empty query.' });
       return;
     }
 
-    await this.agentService.handleUserRequest(
-      userId,
-      role,
-      allowedProperties,
-      data.message,
-      client,
-      data.navigationHistory,
-      data.conversationId
-    );
+    // Abort any existing stream for this socket first
+    if (this.activeStreams.has(client.id)) {
+      this.activeStreams.get(client.id)!.abort();
+    }
+
+    const abortController = new AbortController();
+    this.activeStreams.set(client.id, abortController);
+
+    try {
+      // 1. Resolve conversation history: load from database if conversationId is provided
+      let historyFromDb: any[] = [];
+      let mappedHistory: { role: 'user' | 'assistant'; content: string }[] = [];
+
+      if (data.conversationId) {
+        historyFromDb = await this.agentMemoryService.loadConversationHistory(userId, data.conversationId);
+        mappedHistory = historyFromDb.map((m: any) => ({
+          role: m.sender === 'user' ? 'user' : 'assistant',
+          content: m.text || m.content || '',
+        }));
+      } else if (data.conversationHistory) {
+        mappedHistory = data.conversationHistory;
+      }
+
+      // 2. Prepare user message payload to save in DB later
+      let userMsgText = data.message || '';
+      if (data.fileData) {
+        userMsgText = data.message ? `${data.message}\n[Attached Image]` : '[Attached Image]';
+      } else if (data.audioData) {
+        userMsgText = data.message || '🎤 Voice message';
+      }
+
+      const userMsgObj: any = {
+        id: String(Date.now()),
+        sender: 'user',
+        text: userMsgText,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      };
+
+      if (data.audioData) {
+        userMsgObj.audioBase64 = data.audioData.base64Data;
+        userMsgObj.audioMimeType = data.audioData.mimeType;
+        userMsgObj.duration = data.duration || 0;
+      }
+
+      if (data.fileData) {
+        userMsgObj.attachedImage = data.fileData.base64Data;
+      }
+
+      // 3. Execute stream
+      const eventStream = this.agentService.runAgent(
+        userId,
+        role,
+        allowedProperties,
+        data.message,
+        mappedHistory,
+        data.fileData,
+        data.audioData,
+        abortController.signal
+      );
+
+      let accumulatedResponse = '';
+
+      for await (const event of eventStream) {
+        if (event.type === 'text') {
+          accumulatedResponse += event.payload;
+          client.emit('sophia-token', { text: event.payload });
+        } else if (event.type === 'status') {
+          client.emit('sophia-status', event.payload);
+        } else if (event.type === 'action_start') {
+          client.emit('sophia-action-start', event.payload);
+        } else if (event.type === 'action_end') {
+          client.emit('sophia-action-end', event.payload);
+        } else if (event.type === 'widget') {
+          client.emit('sophia-widget', event.payload);
+        } else if (event.type === 'error') {
+          client.emit('sophia-error', event.payload);
+        }
+      }
+
+      // 4. Save thread to database if conversationId exists and stream wasn't aborted
+      if (data.conversationId && !abortController.signal.aborted) {
+        const sophiaMsgObj = {
+          id: String(Date.now() + 1),
+          sender: 'sophia',
+          text: accumulatedResponse,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        };
+
+        const updatedHistory = [...historyFromDb, userMsgObj, sophiaMsgObj];
+        await this.agentMemoryService.saveConversationHistory(userId, updatedHistory, data.conversationId);
+      }
+
+    } catch (err: any) {
+      if (err.message !== 'AbortError') {
+        client.emit('sophia-error', { message: `Sophia execution failed: ${err.message}` });
+      }
+    } finally {
+      if (this.activeStreams.get(client.id) === abortController) {
+        this.activeStreams.delete(client.id);
+      }
+    }
   }
 }
-
-

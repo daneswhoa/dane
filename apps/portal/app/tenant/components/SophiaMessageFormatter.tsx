@@ -349,4 +349,3 @@ function parseInlineMarkdown(text: string) {
     return match;
   });
 }
-}

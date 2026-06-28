@@ -7,7 +7,9 @@ import { join } from 'path';
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
-  app.useStaticAssets(join(process.cwd(), 'public'));
+  const staticAssetsPath = join(process.cwd(), 'public');
+  console.log(`[Static Assets] Serving assets from: ${staticAssetsPath}`);
+  app.useStaticAssets(staticAssetsPath);
 
   app.enableCors({
     origin: process.env.CORS_ORIGINS?.split(',').map(origin => origin.trim()) || ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'http://localhost:3003'],

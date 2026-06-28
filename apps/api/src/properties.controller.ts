@@ -132,7 +132,8 @@ export class PropertiesController {
       try {
         const fs = require('fs');
         const path = require('path');
-        const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
+        const uploadsDir = path.resolve(process.cwd(), 'public', 'uploads');
+        console.log(`[Photo Upload Fallback] Target local directory: ${uploadsDir}`);
         if (!fs.existsSync(uploadsDir)) {
           fs.mkdirSync(uploadsDir, { recursive: true });
         }
@@ -142,7 +143,12 @@ export class PropertiesController {
         const localFilePath = path.join(uploadsDir, localFileName);
         
         fs.writeFileSync(localFilePath, file.buffer);
-        photoUrl = `http://localhost:4000/uploads/${localFileName}`;
+        console.log(`[Photo Upload Fallback] Successfully saved file locally at: ${localFilePath}`);
+        
+        const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'http';
+        const host = req.headers['x-forwarded-host'] || req.headers.host || 'localhost:4000';
+        photoUrl = `${protocol}://${host}/uploads/${localFileName}`;
+        console.log(`[Photo Upload Fallback] Generated local photoUrl: ${photoUrl}`);
       } catch (fsErr) {
         console.error('Failed to write file locally:', fsErr);
         throw new InternalServerErrorException('Photo upload failed on both cloud and local fallback.');

@@ -69,7 +69,7 @@ export class AgentService {
 
     // 3. Initialize GoogleGenAI client for Gemini Enterprise
     const projectId = this.configService.get<string>('GCS_PROJECT_ID');
-    this.geminiModel = this.configService.get<string>('GEMINI_MODEL') || 'gemini-1.5-pro';
+    this.geminiModel = this.configService.get<string>('GEMINI_MODEL') || 'gemini-3.5-flash';
     this.googleGenAI = new GoogleGenAI({
       enterprise: true,
       project: projectId,
@@ -90,7 +90,8 @@ export class AgentService {
     audioData?: { base64Data: string; mimeType: string },
     signal?: AbortSignal
   ): AsyncGenerator<AgentEvent> {
-    const provider = this.selectProvider(userMessage, fileData, audioData);
+    let provider = this.selectProvider(userMessage, fileData, audioData, userRole);
+    let currentGeminiModel = this.geminiModel;
     
     if (signal?.aborted) {
       yield { type: 'text', payload: ' *(Interrupted before starting)*' };
@@ -208,7 +209,7 @@ If the user sends you a voice/audio message, listen to it directly and respond.`
           yield* this.executeTools(toolCallsAccumulator, messages, userId, userRole, fileData, signal);
         } else {
           // Gemini
-          const events = this.runGeminiRound(messages, systemPrompt, audioData, signal);
+          const events = this.runGeminiRound(messages, systemPrompt, audioData, signal, currentGeminiModel);
           let hasToolCalls = false;
           const toolCallsAccumulator: any[] = [];
           let textAccumulator = '';
@@ -242,6 +243,22 @@ If the user sends you a voice/audio message, listen to it directly and respond.`
           yield { type: 'status', payload: { status: 'idle', message: 'Ready' } };
           break;
         }
+
+        if (provider === 'gemini') {
+          this.logger.warn(`Gemini (${currentGeminiModel}) failed: ${err.message}`);
+          if (currentGeminiModel === 'gemini-3.5-flash') {
+            currentGeminiModel = 'gemini-3.1-pro';
+            this.logger.warn(`Falling back to gemini-3.1-pro`);
+            yield { type: 'status', payload: { status: 'thinking', message: 'Re-routing through Gemini 3.1 Pro...' } };
+            continue;
+          } else if (currentGeminiModel === 'gemini-3.1-pro') {
+            provider = 'deepseek';
+            this.logger.warn(`Gemini completely failed. Falling back to DeepSeek.`);
+            yield { type: 'status', payload: { status: 'thinking', message: 'Gemini unavailable. Re-routing to DeepSeek...' } };
+            continue;
+          }
+        }
+
         this.logger.error(`Error in Sophia reasoning loop round ${round}`, err);
         yield { type: 'error', payload: { message: `Sophia encountered an issue: ${err.message}` } };
         break;
@@ -258,7 +275,11 @@ If the user sends you a voice/audio message, listen to it directly and respond.`
   /**
    * Route request to Gemini for excel/spreadsheet tasks and native audio, and DeepSeek for normal conversation
    */
-  private selectProvider(userMessage: string, fileData?: any, audioData?: any): 'gemini' | 'deepseek' {
+  private selectProvider(userMessage: string, fileData?: any, audioData?: any, userRole?: string): 'gemini' | 'deepseek' {
+    if (userRole === 'tenant') {
+      return 'deepseek';
+    }
+
     if (audioData && audioData.base64Data && audioData.base64Data.trim() !== '') {
       return 'gemini'; // Gemini has native multimodal audio capabilities
     }
@@ -349,12 +370,13 @@ If the user sends you a voice/audio message, listen to it directly and respond.`
     messages: ChatMessage[],
     systemPrompt: string,
     audioData?: { base64Data: string; mimeType: string },
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    modelName?: string
   ): AsyncGenerator<{ type: 'text' | 'tool_calls'; payload: any }> {
     const { contents } = this.mapMessagesToGemini(messages, audioData);
 
     const responseStream = await this.googleGenAI.models.generateContentStream({
-      model: this.geminiModel,
+      model: modelName || this.geminiModel,
       contents,
       config: {
         systemInstruction: systemPrompt,

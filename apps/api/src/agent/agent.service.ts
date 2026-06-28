@@ -69,7 +69,7 @@ export class AgentService {
 
     // 3. Initialize GoogleGenAI client for Gemini Enterprise
     const projectId = this.configService.get<string>('GCS_PROJECT_ID');
-    this.geminiModel = this.configService.get<string>('GEMINI_MODEL') || 'gemini-1.5-pro';
+    this.geminiModel = this.configService.get<string>('GEMINI_MODEL') || 'gemini-3.5-flash';
     this.googleGenAI = new GoogleGenAI({
       enterprise: true,
       project: projectId,
@@ -165,7 +165,7 @@ If the user sends you a voice/audio message, listen to it directly and respond.`
     }
     messages.push({ role: 'user', content: finalUserMessage });
 
-    const maxRounds = 5;
+    const maxRounds = 15;
     let round = 1;
 
     while (round <= maxRounds) {

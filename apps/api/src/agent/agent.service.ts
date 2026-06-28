@@ -508,7 +508,7 @@ If the user sends you a voice/audio message, listen to it directly and respond.$
 
         // Truncate output preview for messages list if extremely large
         let outputStr = JSON.stringify(output);
-        const MAX_PREVIEW_LIMIT = 5000;
+        const MAX_PREVIEW_LIMIT = 100000;
         if (outputStr.length > MAX_PREVIEW_LIMIT) {
           outputStr = outputStr.substring(0, MAX_PREVIEW_LIMIT) + `... [TRUNCATED - Omitted ${outputStr.length - MAX_PREVIEW_LIMIT} chars]`;
         }

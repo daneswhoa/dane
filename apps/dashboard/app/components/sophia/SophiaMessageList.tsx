@@ -101,116 +101,124 @@ export default function SophiaMessageList({
           <span className="text-[9px] uppercase font-semibold tracking-widest text-paper-400 dark:text-ink-500 bg-paper-100 dark:bg-ink-850 px-3 py-1 rounded-full border border-paper-200 dark:border-ink-700/50">Conversations</span>
         </div>
 
-        {messages.map((msg) => (
-          <div
-            key={msg.id}
-            className={`flex items-start gap-3 max-w-[85%] ${
-              msg.sender === 'user' ? 'self-end justify-end ml-auto' : ''
-            }`}
-          >
-            {msg.sender === 'sophia' && (
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-coral-100 to-coral-200 dark:from-coral-900/40 dark:to-coral-800/40 flex items-center justify-center flex-shrink-0 border border-coral-200 dark:border-coral-700/50 shadow-sm mt-1 relative">
-                <Sparkles className="w-4 h-4 text-coral-600 dark:text-coral-400" />
-              </div>
-            )}
+        {messages.map((msg) => {
+          const actionBlocks = msg.blocks?.filter(b => b.type === 'action') || [];
+          const hasActions = actionBlocks.length > 0;
 
-            <div className={`flex flex-col gap-1.5 ${msg.sender === 'user' ? 'items-end' : ''}`}>
-              <span className="text-[10px] font-semibold text-paper-900 dark:text-white px-1">
-                {msg.sender === 'sophia' ? 'Sophia' : 'You'}
-              </span>
-              
-              <div className={`text-[13px] leading-relaxed p-4 rounded-2xl shadow-sm ${
-                msg.sender === 'user'
-                  ? 'bg-paper-800 dark:bg-ink-200 text-white dark:text-ink-900 rounded-tr-sm'
-                  : 'bg-white/60 dark:bg-ink-800/60 backdrop-blur-md border border-paper-200/50 dark:border-ink-700/50 text-paper-800 dark:text-ink-100 rounded-tl-sm'
-              }`}>
-                {msg.blocks && msg.blocks.length > 0 ? (
-                  <div className="space-y-4">
-                    {msg.blocks.map((block, bIdx) => {
-                      if (block.type === 'text') {
-                        return <FormattedMessage key={bIdx} text={block.text || ''} />;
-                      }
-                      if (block.type === 'action') {
-                        const isPending = block.actionStatus === 'pending';
-                        const isCompleted = block.actionStatus === 'completed';
-                        const isFailed = block.actionStatus === 'failed';
-                        return (
-                          <div 
-                            key={bIdx} 
-                            className={`my-3 p-3 rounded-xl border flex items-center justify-between gap-3 text-xs font-mono transition-all duration-300 ${
-                              isPending 
-                                ? 'bg-amber-550/10 dark:bg-amber-500/5 border-amber-500/20 text-amber-600 dark:text-amber-400 animate-pulse'
-                                : isCompleted
-                                  ? 'bg-emerald-550/10 dark:bg-emerald-500/5 border-emerald-500/20 text-emerald-600 dark:text-emerald-400'
-                                  : 'bg-red-550/10 dark:bg-red-500/5 border-red-500/20 text-red-650 dark:text-red-400'
-                            }`}
-                          >
-                            <div className="flex items-center gap-2 truncate">
-                              {isPending && <span className="w-1.5 h-1.5 bg-amber-550 dark:bg-amber-500 rounded-full animate-ping" />}
-                              {isCompleted && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />}
-                              {isFailed && <AlertTriangle className="w-3.5 h-3.5 text-red-505" />}
-                              <span className="font-bold uppercase tracking-wider">{block.actionName}</span>
-                              {block.actionDetails && <span className="opacity-70 truncate">- {block.actionDetails}</span>}
-                            </div>
-                            <span className="opacity-50 text-[9px]">{block.actionTimestamp}</span>
-                          </div>
-                        );
-                      }
-                      if (block.type === 'widget') {
-                        return (
-                          <SophiaWidgets 
-                            key={bIdx}
-                            widgetData={block.widgetData} 
-                            onSendMessage={onSendMessage} 
-                          />
-                        );
-                      }
-                      return null;
-                    })}
-                  </div>
-                ) : msg.audioBase64 ? (
-                  <SophiaVoiceWaveform
-                    audioBase64={msg.audioBase64}
-                    audioMimeType={msg.audioMimeType}
-                    duration={msg.duration}
-                  />
-                ) : (
-                  <FormattedMessage text={msg.text} />
-                )}
+          const isAnyFailed = actionBlocks.some(b => b.actionStatus === 'failed');
+          const isAnyPending = actionBlocks.some(b => b.actionStatus === 'pending');
+          const isAllCompleted = actionBlocks.every(b => b.actionStatus === 'completed');
 
-                {!msg.blocks && msg.widget && msg.widget}
-                {!msg.blocks && msg.widgetData && (
-                  <SophiaWidgets 
-                    widgetData={msg.widgetData} 
-                    onSendMessage={onSendMessage} 
-                  />
-                )}
-              </div>
+          let badgeColorClass = 'text-amber-600 dark:text-amber-400 bg-amber-500/5 border-amber-500/20';
+          let statusIcon = <Cpu className="w-3.5 h-3.5 animate-pulse" />;
 
-              {/* Execution Metrics logs */}
-              {msg.sender === 'sophia' && (msg.successCount !== undefined || msg.failureCount !== undefined) && (
-                <div className="flex items-center gap-3 mt-1.5 px-1 text-[10px] text-paper-500 dark:text-ink-400 font-mono">
-                  <span className="flex items-center gap-1">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                    Executed: {msg.successCount || 0}
-                  </span>
-                  {(msg.failureCount && msg.failureCount > 0) ? (
-                    <span className="flex items-center gap-1 text-red-500 font-bold">
-                      <AlertTriangle className="w-3.5 h-3.5 text-red-500" />
-                      Failed: {msg.failureCount}
+          if (isAnyFailed) {
+            badgeColorClass = 'text-red-500 bg-red-500/5 border-red-500/20';
+            statusIcon = <AlertTriangle className="w-3.5 h-3.5 text-red-500" />;
+          } else if (isAllCompleted) {
+            badgeColorClass = 'text-emerald-600 dark:text-emerald-450 bg-emerald-500/5 border-emerald-500/20';
+            statusIcon = <CheckCircle2 className="w-3.5 h-3.5 text-emerald-555" />;
+          }
+
+          return (
+            <div
+              key={msg.id}
+              className={`flex items-start gap-3 max-w-[85%] ${
+                msg.sender === 'user' ? 'self-end justify-end ml-auto' : ''
+              }`}
+            >
+              {msg.sender === 'sophia' && (
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-coral-100 to-coral-200 dark:from-coral-900/40 dark:to-coral-800/40 flex items-center justify-center flex-shrink-0 border border-coral-200 dark:border-coral-700/50 shadow-sm mt-1 relative">
+                  <Sparkles className="w-4 h-4 text-coral-600 dark:text-coral-400" />
+                </div>
+              )}
+
+              <div className={`flex flex-col gap-1.5 ${msg.sender === 'user' ? 'items-end' : ''}`}>
+                <span className="text-[10px] font-semibold text-paper-900 dark:text-white px-1">
+                  {msg.sender === 'sophia' ? 'Sophia' : 'You'}
+                </span>
+                
+                <div className={`text-[13px] leading-relaxed p-4 rounded-2xl shadow-sm ${
+                  msg.sender === 'user'
+                    ? 'bg-paper-800 dark:bg-ink-200 text-white dark:text-ink-900 rounded-tr-sm'
+                    : 'bg-white/60 dark:bg-ink-800/60 backdrop-blur-md border border-paper-200/50 dark:border-ink-700/50 text-paper-800 dark:text-ink-100 rounded-tl-sm'
+                }`}>
+                  {msg.blocks && msg.blocks.length > 0 ? (
+                    <div className="space-y-4">
+                      {hasActions && (
+                        <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-bold font-mono tracking-wider shadow-sm uppercase ${badgeColorClass}`}>
+                          {statusIcon}
+                          <span>
+                            {isAnyPending 
+                              ? (actionBlocks.length > 1 ? `Running Tools (${actionBlocks.length})...` : 'Running Tool...')
+                              : (actionBlocks.length > 1 ? `Tools Used (${actionBlocks.length})` : 'Tool Used')
+                            }
+                          </span>
+                        </div>
+                      )}
+                      {msg.blocks.map((block, bIdx) => {
+                        if (block.type === 'text') {
+                          return <FormattedMessage key={bIdx} text={block.text || ''} />;
+                        }
+                        if (block.type === 'action') {
+                          return null;
+                        }
+                        if (block.type === 'widget') {
+                          return (
+                            <SophiaWidgets 
+                              key={bIdx}
+                              widgetData={block.widgetData} 
+                              onSendMessage={onSendMessage} 
+                            />
+                          );
+                        }
+                        return null;
+                      })}
+                    </div>
+                  ) : msg.audioBase64 ? (
+                    <SophiaVoiceWaveform
+                      audioBase64={msg.audioBase64}
+                      audioMimeType={msg.audioMimeType}
+                      duration={msg.duration}
+                    />
+                  ) : (
+                    <FormattedMessage text={msg.text} />
+                  )}
+
+                  {!msg.blocks && msg.widget && msg.widget}
+                  {!msg.blocks && msg.widgetData && (
+                    <SophiaWidgets 
+                      widgetData={msg.widgetData} 
+                      onSendMessage={onSendMessage} 
+                    />
+                  )}
+                </div>
+
+                {/* Execution Metrics logs */}
+                {msg.sender === 'sophia' && (msg.successCount !== undefined || msg.failureCount !== undefined) && (
+                  <div className="flex items-center gap-3 mt-1.5 px-1 text-[10px] text-paper-500 dark:text-ink-400 font-mono">
+                    <span className="flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                      Executed: {msg.successCount || 0}
                     </span>
-                  ) : null}
+                    {(msg.failureCount && msg.failureCount > 0) ? (
+                      <span className="flex items-center gap-1 text-red-500 font-bold">
+                        <AlertTriangle className="w-3.5 h-3.5 text-red-500" />
+                        Failed: {msg.failureCount}
+                      </span>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+
+              {msg.sender === 'user' && (
+                <div className="w-8 h-8 rounded-full border border-paper-200 dark:border-ink-700 bg-coral-100 dark:bg-coral-500/10 text-coral-600 dark:text-coral-400 font-semibold flex items-center justify-center shadow-sm text-xs mt-1">
+                  JD
                 </div>
               )}
             </div>
-
-            {msg.sender === 'user' && (
-              <div className="w-8 h-8 rounded-full border border-paper-200 dark:border-ink-700 bg-coral-100 dark:bg-coral-500/10 text-coral-600 dark:text-coral-400 font-semibold flex items-center justify-center shadow-sm text-xs mt-1">
-                JD
-              </div>
-            )}
-          </div>
-        ))}
+          );
+        })}
 
         {/* Typing / Subagents Working Indicator */}
         {isTyping && (

@@ -370,14 +370,21 @@ If the user sends you a voice/audio message, listen to it directly and respond.`
 
       if (chunk.functionCalls && chunk.functionCalls.length > 0) {
         for (const fc of chunk.functionCalls) {
-          toolCalls.push({
-            id: fc.id || `call_${Date.now()}_${toolCallIndex++}`,
-            type: 'function',
-            function: {
-              name: fc.name,
-              arguments: JSON.stringify(fc.args),
-            },
-          });
+          const argsStr = JSON.stringify(fc.args);
+          // Deduplicate to prevent multiple identical tool executions per round
+          const isDuplicate = toolCalls.some(
+            tc => tc.function.name === fc.name && tc.function.arguments === argsStr
+          );
+          if (!isDuplicate) {
+            toolCalls.push({
+              id: fc.id || `call_${Date.now()}_${toolCallIndex++}`,
+              type: 'function',
+              function: {
+                name: fc.name,
+                arguments: argsStr,
+              },
+            });
+          }
         }
       }
     }

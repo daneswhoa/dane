@@ -13,7 +13,7 @@ const playfair = Playfair_Display({
 });
 
 export const metadata: Metadata = {
-  title: 'Landlord — Smart Property Management',
+  title: 'Dane Properties — Smart Property Management',
   description: 'Manage properties, tenants, and maintenance with an AI-powered platform.',
 };
 

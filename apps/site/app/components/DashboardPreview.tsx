@@ -12,10 +12,8 @@ export default function DashboardPreview() {
         <div className="flex justify-between items-center mb-8 border-b border-white/5 pb-4">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
-              <div className="w-6 h-6 bg-primary rounded flex items-center justify-center text-white">
-                <Layers className="w-3.5 h-3.5" />
-              </div>
-              <span className="font-semibold text-sm text-white">Landlord</span>
+              <img src="/dane_logomark.png" alt="Dane Properties Logo" className="w-6 h-6 object-contain" />
+              <span className="font-semibold text-sm text-white">Dane Properties</span>
             </div>
             <span className="text-paper-300 text-xs hidden sm:inline">&gt; Overview</span>
           </div>

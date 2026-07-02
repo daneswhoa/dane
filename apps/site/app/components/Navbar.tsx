@@ -1,14 +1,11 @@
 import React from 'react';
-import { Layers } from 'lucide-react';
 
 export default function Navbar() {
   return (
     <nav className="max-w-7xl mx-auto px-6 py-6 flex justify-between items-center relative z-10">
       <div className="flex items-center gap-2">
-        <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center text-white">
-          <Layers className="w-4 h-4" />
-        </div>
-        <span className="font-bold text-xl tracking-tight text-white">Landlord</span>
+        <img src="/dane_logomark.png" alt="Dane Properties Logo" className="w-8 h-8 object-contain" />
+        <span className="font-bold text-xl tracking-tight text-white">Dane Properties</span>
       </div>
       
       <div className="hidden md:flex items-center gap-8 text-sm font-medium text-paper-300">

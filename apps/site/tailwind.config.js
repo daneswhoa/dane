@@ -13,7 +13,7 @@ export default {
         serif: ['var(--font-serif)', 'serif'],
       },
       colors: {
-        primary: '#E95D2A', // distinctive brand orange-coral
+        primary: '#ff6b6b', // distinctive brand coral matching dashboard
         coral: {
           DEFAULT: '#ff6b6b',
           hover: '#fa5252',

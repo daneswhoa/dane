@@ -18,7 +18,7 @@ export default function PricingCard({ title, price, desc, features, isPro }: Pri
     }`}>
       {isPro && (
         <div className="bg-primary text-center py-1.5 text-[9px] font-bold uppercase tracking-wider text-white w-full absolute top-0 left-0">
-          Landlord Recommends
+          Dane Recommends
         </div>
       )}
       <div className="flex items-center gap-2 mb-4 text-white font-semibold text-sm">

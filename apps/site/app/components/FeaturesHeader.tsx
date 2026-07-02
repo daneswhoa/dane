@@ -10,7 +10,7 @@ export default function FeaturesHeader() {
         </h2>
       </div>
       <p className="text-paper-300 max-w-sm text-sm leading-relaxed">
-        Track rent income, manage work orders, and keep direct eyes on occupancy logs using landlord-first admin tools.
+        Track rent income, manage work orders, and keep direct eyes on occupancy logs using manager-first admin tools.
       </p>
     </div>
   );

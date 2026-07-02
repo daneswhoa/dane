@@ -5,6 +5,10 @@ import { auth } from './better-auth';
 export class SessionGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
+    const url = request.url || '';
+    if (url.includes('invites/verify')) {
+      return true;
+    }
 
     try {
       // Build Headers object from request headers for Better Auth compatibility

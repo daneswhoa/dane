@@ -5,22 +5,16 @@ config({ path: resolve(__dirname, '../../../../.env') });
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { emailOTP } from 'better-auth/plugins';
-import { Pool } from 'pg';
-import { drizzle } from 'drizzle-orm/node-postgres';
-import { URL } from 'url';
+import { Pool, neonConfig } from '@neondatabase/serverless';
+import { drizzle } from 'drizzle-orm/neon-serverless';
+import ws from 'ws';
 import * as schema from '../db/schema';
 
-// Create a single database pool for Better Auth with Cloud SQL SSL configuration
-const dbUrl = new URL(process.env.DATABASE_URL!);
+neonConfig.webSocketConstructor = ws;
+
+// Create a single database pool for Better Auth with Neon Serverless configuration
 const pool = new Pool({
-  user: dbUrl.username,
-  password: decodeURIComponent(dbUrl.password),
-  host: dbUrl.hostname,
-  port: parseInt(dbUrl.port || '5432'),
-  database: dbUrl.pathname.slice(1),
-  ssl: {
-    rejectUnauthorized: false,
-  },
+  connectionString: process.env.DATABASE_URL!,
 });
 export const db = drizzle(pool, { schema });
 

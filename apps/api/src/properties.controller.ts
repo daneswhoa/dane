@@ -16,44 +16,39 @@ export class PropertiesController {
   async getProperties(@Req() req: any) {
     const callerId = req.user.id;
     const callerRole = req.user.role;
+    const callerOrg = req.user.organizationName || '';
 
     if (callerRole === 'tenant') {
       throw new BadRequestException('Access denied. Tenants cannot view property lists.');
     }
 
-    let targetOwnerId = callerId;
-    if (callerRole !== 'manager') {
-      const relation = await this.db
-        .select()
-        .from(schema.managerRelations)
-        .where(eq(schema.managerRelations.managerId, callerId))
-        .limit(1);
-      if (relation.length > 0) {
-        targetOwnerId = relation[0].ownerId;
-      }
-    }
-
     try {
-      let list = await this.db
-        .select()
-        .from(schema.properties)
-        .where(eq(schema.properties.ownerId, targetOwnerId))
-        .orderBy(desc(schema.properties.createdAt));
+      let list: any[] = [];
+      if (callerOrg) {
+        list = await this.db
+          .select()
+          .from(schema.properties)
+          .where(eq(schema.properties.organizationName, callerOrg))
+          .orderBy(desc(schema.properties.createdAt));
+      }
 
-      if (callerRole !== 'manager' && req.user.allowedProperties && req.user.allowedProperties !== 'all') {
+      if (req.user.permissions && req.user.allowedProperties && req.user.allowedProperties !== 'all') {
         const allowedIds = req.user.allowedProperties.split(',');
         list = list.filter((p: any) => allowedIds.includes(p.id));
       }
 
-      const allUnits = await this.db
-        .select({
-          propertyId: schema.units.propertyId,
-          rent: schema.units.rent,
-          status: schema.units.status
-        })
-        .from(schema.units)
-        .innerJoin(schema.properties, eq(schema.units.propertyId, schema.properties.id))
-        .where(eq(schema.properties.ownerId, targetOwnerId));
+      let allUnits: any[] = [];
+      if (callerOrg) {
+        allUnits = await this.db
+          .select({
+            propertyId: schema.units.propertyId,
+            rent: schema.units.rent,
+            status: schema.units.status
+          })
+          .from(schema.units)
+          .innerJoin(schema.properties, eq(schema.units.propertyId, schema.properties.id))
+          .where(eq(schema.properties.organizationName, callerOrg));
+      }
 
       const unitsByProp = allUnits.reduce((acc: any, u: any) => {
         if (!acc[u.propertyId]) acc[u.propertyId] = [];
@@ -178,6 +173,7 @@ export class PropertiesController {
         name: body.name,
         address: body.address,
         ownerId: callerId,
+        organizationName: req.user.organizationName || null,
         unitsCount: body.unitsCount || 1,
         status: 'pending',
         photoUrl: body.photoUrl || null,
@@ -187,6 +183,7 @@ export class PropertiesController {
       await this.db.insert(schema.auditLogs).values({
         id: 'audit-' + Math.random().toString(36).substring(2, 9),
         ownerId: callerId,
+        organizationName: req.user.organizationName || null,
         actorName: req.user.name || 'Owner',
         actorEmail: req.user.email,
         actorInitials: (req.user.name || 'OW').split(' ').map((n: string) => n[0]).join('').toUpperCase(),
@@ -395,6 +392,7 @@ export class PropertiesController {
             propertyId: id,
             unitId: unitId,
             ownerId: callerId,
+            organizationName: req.user.organizationName || null,
             amount: totalInvoiceAmount,
             type: 'Rent & Initial Fees',
             status: 'PENDING',
@@ -414,6 +412,7 @@ export class PropertiesController {
               propertyId: id,
               unitId: unitId,
               ownerId: callerId,
+              organizationName: req.user.organizationName || null,
               amount: Number(unit.arrears),
               type: 'Arrears',
               status: 'PENDING',
@@ -469,6 +468,7 @@ export class PropertiesController {
       await this.db.insert(schema.auditLogs).values({
         id: 'audit-' + Math.random().toString(36).substring(2, 9),
         ownerId: callerId,
+        organizationName: req.user.organizationName || null,
         actorName: req.user.name || 'Owner',
         actorEmail: req.user.email,
         actorInitials: (req.user.name || 'OW').split(' ').map((n: string) => n[0]).join('').toUpperCase(),
@@ -491,41 +491,33 @@ export class PropertiesController {
   async getUnits(@Req() req: any) {
     const callerId = req.user.id;
     const callerRole = req.user.role;
+    const callerOrg = req.user.organizationName || '';
 
     if (callerRole === 'tenant') {
       throw new BadRequestException('Access denied. Tenants cannot view units.');
     }
 
-    let targetOwnerId = callerId;
-    if (callerRole !== 'manager') {
-      const relation = await this.db
-        .select()
-        .from(schema.managerRelations)
-        .where(eq(schema.managerRelations.managerId, callerId))
-        .limit(1);
-      if (relation.length > 0) {
-        targetOwnerId = relation[0].ownerId;
-      }
-    }
-
     try {
-      let list = await this.db
-        .select({
-          id: schema.units.id,
-          propertyId: schema.units.propertyId,
-          label: schema.units.label,
-          status: schema.units.status,
-          tenantId: schema.units.tenantId,
-          tenantName: schema.users.name,
-          tenantEmail: schema.users.email,
-          propertyName: schema.properties.name,
-        })
-        .from(schema.units)
-        .innerJoin(schema.properties, eq(schema.units.propertyId, schema.properties.id))
-        .leftJoin(schema.users, eq(schema.units.tenantId, schema.users.id))
-        .where(eq(schema.properties.ownerId, targetOwnerId));
+      let list: any[] = [];
+      if (callerOrg) {
+        list = await this.db
+          .select({
+            id: schema.units.id,
+            propertyId: schema.units.propertyId,
+            label: schema.units.label,
+            status: schema.units.status,
+            tenantId: schema.units.tenantId,
+            tenantName: schema.users.name,
+            tenantEmail: schema.users.email,
+            propertyName: schema.properties.name,
+          })
+          .from(schema.units)
+          .innerJoin(schema.properties, eq(schema.units.propertyId, schema.properties.id))
+          .leftJoin(schema.users, eq(schema.units.tenantId, schema.users.id))
+          .where(eq(schema.properties.organizationName, callerOrg));
+      }
 
-      if (callerRole !== 'manager' && req.user.allowedProperties && req.user.allowedProperties !== 'all') {
+      if (req.user.permissions && req.user.allowedProperties && req.user.allowedProperties !== 'all') {
         const allowedIds = req.user.allowedProperties.split(',');
         list = list.filter((u: any) => allowedIds.includes(u.propertyId));
       }
@@ -562,19 +554,7 @@ export class PropertiesController {
 
       const property = propList[0];
       
-      let targetOwnerId = callerId;
-      if (callerRole !== 'manager') {
-        const relation = await this.db
-          .select()
-          .from(schema.managerRelations)
-          .where(eq(schema.managerRelations.managerId, callerId))
-          .limit(1);
-        if (relation.length > 0) {
-          targetOwnerId = relation[0].ownerId;
-        }
-      }
-
-      if (property.ownerId !== targetOwnerId) {
+      if (property.organizationName !== req.user.organizationName) {
         throw new BadRequestException('Access denied. You do not manage this property.');
       }
 
@@ -591,7 +571,8 @@ export class PropertiesController {
 
         await this.db.insert(schema.auditLogs).values({
           id: 'audit-' + Math.random().toString(36).substring(2, 9),
-          ownerId: targetOwnerId,
+          ownerId: callerId,
+          organizationName: req.user.organizationName || null,
           actorName: req.user.name || 'Owner',
           actorEmail: req.user.email,
           actorInitials: (req.user.name || 'OW').split(' ').map((n: string) => n[0]).join('').toUpperCase(),
@@ -642,19 +623,7 @@ export class PropertiesController {
 
       const property = propList[0];
       
-      let targetOwnerId = callerId;
-      if (callerRole !== 'manager') {
-        const relation = await this.db
-          .select()
-          .from(schema.managerRelations)
-          .where(eq(schema.managerRelations.managerId, callerId))
-          .limit(1);
-        if (relation.length > 0) {
-          targetOwnerId = relation[0].ownerId;
-        }
-      }
-
-      if (property.ownerId !== targetOwnerId) {
+      if (property.organizationName !== req.user.organizationName) {
         throw new BadRequestException('Access denied. You do not manage this property.');
       }
 
@@ -691,7 +660,8 @@ export class PropertiesController {
 
         await tx.insert(schema.auditLogs).values({
           id: 'audit-' + Math.random().toString(36).substring(2, 9),
-          ownerId: targetOwnerId,
+          ownerId: callerId,
+          organizationName: req.user.organizationName || null,
           actorName: req.user.name || 'Owner',
           actorEmail: req.user.email,
           actorInitials: (req.user.name || 'OW').split(' ').map((n: string) => n[0]).join('').toUpperCase(),
@@ -736,6 +706,7 @@ export class PropertiesController {
           tenantId: schema.units.tenantId,
           propertyName: schema.properties.name,
           ownerId: schema.properties.ownerId,
+          organizationName: schema.properties.organizationName,
         })
         .from(schema.units)
         .innerJoin(schema.properties, eq(schema.units.propertyId, schema.properties.id))
@@ -748,19 +719,7 @@ export class PropertiesController {
 
       const unit = unitList[0];
 
-      let targetOwnerId = callerId;
-      if (callerRole !== 'manager') {
-        const relation = await this.db
-          .select()
-          .from(schema.managerRelations)
-          .where(eq(schema.managerRelations.managerId, callerId))
-          .limit(1);
-        if (relation.length > 0) {
-          targetOwnerId = relation[0].ownerId;
-        }
-      }
-
-      if (unit.ownerId !== targetOwnerId) {
+      if (unit.organizationName !== req.user.organizationName) {
         throw new BadRequestException('Access denied. You do not manage the property of this unit.');
       }
 
@@ -782,7 +741,8 @@ export class PropertiesController {
 
       await this.db.insert(schema.auditLogs).values({
         id: 'audit-' + Math.random().toString(36).substring(2, 9),
-        ownerId: targetOwnerId,
+        ownerId: callerId,
+        organizationName: req.user.organizationName || null,
         actorName: req.user.name || 'Owner',
         actorEmail: req.user.email,
         actorInitials: (req.user.name || 'OW').split(' ').map((n: string) => n[0]).join('').toUpperCase(),

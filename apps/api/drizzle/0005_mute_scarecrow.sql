@@ -8,13 +8,13 @@ DROP TABLE "invitation_permissions" CASCADE;--> statement-breakpoint
 DROP TABLE "member" CASCADE;--> statement-breakpoint
 DROP TABLE "member_permissions" CASCADE;--> statement-breakpoint
 DROP TABLE "organization" CASCADE;--> statement-breakpoint
-ALTER TABLE "invoices" DROP CONSTRAINT "invoices_organization_id_organization_id_fk";
+ALTER TABLE "invoices" DROP CONSTRAINT IF EXISTS "invoices_organization_id_organization_id_fk";
 --> statement-breakpoint
-ALTER TABLE "properties" DROP CONSTRAINT "properties_organization_id_organization_id_fk";
+ALTER TABLE "properties" DROP CONSTRAINT IF EXISTS "properties_organization_id_organization_id_fk";
 --> statement-breakpoint
-ALTER TABLE "tickets" DROP CONSTRAINT "tickets_organization_id_organization_id_fk";
+ALTER TABLE "tickets" DROP CONSTRAINT IF EXISTS "tickets_organization_id_organization_id_fk";
 --> statement-breakpoint
-ALTER TABLE "units" DROP CONSTRAINT "units_organization_id_organization_id_fk";
+ALTER TABLE "units" DROP CONSTRAINT IF EXISTS "units_organization_id_organization_id_fk";
 --> statement-breakpoint
 ALTER TABLE "user" ADD COLUMN "username" varchar(255);--> statement-breakpoint
 ALTER TABLE "invoices" DROP COLUMN "organization_id";--> statement-breakpoint

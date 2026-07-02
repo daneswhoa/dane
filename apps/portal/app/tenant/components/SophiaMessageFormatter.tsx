@@ -210,7 +210,7 @@ function PropertyUnitCardList({ headers, rows }: { headers: string[]; rows: stri
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-xs font-bold text-paper-900 dark:text-white leading-tight">
-                    {cleanName}
+                    {parseInlineMarkdown(cleanName)}
                   </span>
                   {statusCell && (
                     <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
@@ -222,22 +222,22 @@ function PropertyUnitCardList({ headers, rows }: { headers: string[]; rows: stri
                             ? 'bg-red-500/10 text-red-650'
                             : 'bg-paper-100 dark:bg-ink-800 text-paper-600 dark:text-ink-400'
                     }`}>
-                      {statusText}
+                      {parseInlineMarkdown(statusText)}
                     </span>
                   )}
                 </div>
                 {location && (
                   <div className="flex items-center gap-1 text-[10px] text-paper-400 dark:text-ink-500 mt-0.5 font-semibold">
                     <MapPin className="w-3 h-3 text-paper-400 dark:text-ink-500" />
-                    <span>{location}</span>
+                    <span>{parseInlineMarkdown(location)}</span>
                   </div>
                 )}
                 {extraDetails.length > 0 && (
                   <div className="mt-1.5 flex flex-wrap gap-x-2 gap-y-1 text-[10px] text-paper-500 dark:text-ink-400 font-medium">
                     {extraDetails.map((detail, dIdx) => (
                       <div key={dIdx} className="flex items-center gap-1 bg-paper-100/50 dark:bg-ink-950/30 px-2 py-0.5 rounded-md border border-paper-200/20 dark:border-ink-800/10">
-                        <span className="font-semibold text-paper-400 dark:text-ink-500">{detail.label}:</span>
-                        <span className="text-paper-700 dark:text-ink-300">{detail.value}</span>
+                        <span className="font-semibold text-paper-400 dark:text-ink-500">{parseInlineMarkdown(detail.label)}:</span>
+                        <span className="text-paper-700 dark:text-ink-300">{parseInlineMarkdown(detail.value)}</span>
                       </div>
                     ))}
                   </div>
@@ -249,13 +249,13 @@ function PropertyUnitCardList({ headers, rows }: { headers: string[]; rows: stri
               {unitsText && (
                 <div className="flex items-center gap-1.5 text-[10px] font-mono font-bold text-paper-600 dark:text-ink-300">
                   <Home className="w-3.5 h-3.5 text-paper-400 dark:text-ink-500" />
-                  <span>{unitsText}</span>
+                  <span>{parseInlineMarkdown(unitsText)}</span>
                 </div>
               )}
               {occupancyText && (
                 <div className="flex items-center gap-1.5 text-[10px] font-mono font-medium text-paper-500 dark:text-ink-400">
                   <Users className="w-3.5 h-3.5 text-paper-400 dark:text-ink-500" />
-                  <span className="capitalize">{occupancyText}</span>
+                  <span className="capitalize">{parseInlineMarkdown(occupancyText)}</span>
                 </div>
               )}
             </div>
@@ -275,7 +275,7 @@ function CleanDataTable({ headers, rows }: { headers: string[]; rows: string[][]
             <tr>
               {headers.map((col, idx) => (
                 <th key={idx} className="px-3 py-2 text-left uppercase tracking-wider">
-                  {col}
+                  {parseInlineMarkdown(col)}
                 </th>
               ))}
             </tr>
@@ -285,7 +285,7 @@ function CleanDataTable({ headers, rows }: { headers: string[]; rows: string[][]
               <tr key={rowIdx} className="hover:bg-paper-50/50 dark:hover:bg-ink-950/25 transition-colors">
                 {row.map((val, cellIdx) => (
                   <td key={cellIdx} className="px-3 py-2 whitespace-nowrap">
-                    {String(val)}
+                    {parseInlineMarkdown(String(val))}
                   </td>
                 ))}
               </tr>
@@ -306,7 +306,7 @@ function DataTable({ columns, rows }: { columns: string[]; rows: any[][] }) {
             <tr>
               {columns.map((col, idx) => (
                 <th key={idx} className="px-3 py-2 text-left uppercase tracking-wider">
-                  {col}
+                  {parseInlineMarkdown(col)}
                 </th>
               ))}
             </tr>
@@ -316,7 +316,7 @@ function DataTable({ columns, rows }: { columns: string[]; rows: any[][] }) {
               <tr key={rowIdx} className="hover:bg-paper-50/50 dark:hover:bg-ink-950/25 transition-colors">
                 {row.map((val, cellIdx) => (
                   <td key={cellIdx} className="px-3 py-2 whitespace-nowrap">
-                    {String(val)}
+                    {parseInlineMarkdown(String(val))}
                   </td>
                 ))}
               </tr>

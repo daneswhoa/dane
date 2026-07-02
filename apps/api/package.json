@@ -15,6 +15,7 @@
     "@google-cloud/storage": "^7.15.0",
     "@google-cloud/tasks": "^6.2.3",
     "@google/genai": "^2.8.0",
+    "@neondatabase/serverless": "^1.1.0",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.0.1",
@@ -31,6 +32,7 @@
     "rxjs": "^7.8.1",
     "socket.io": "^4.8.3",
     "stripe": "^22.2.2",
+    "ws": "^8.21.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
@@ -40,6 +42,7 @@
     "@types/express": "^5.0.0",
     "@types/node": "^22.10.7",
     "@types/pg": "^8.11.11",
+    "@types/ws": "^8.18.1",
     "drizzle-kit": "^0.31.10",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",

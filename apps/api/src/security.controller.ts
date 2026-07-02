@@ -19,13 +19,13 @@ export class SecurityController {
     @Query('search') search?: string,
     @Query('severity') severity?: string
   ) {
-    const ownerId = req.user.id;
+    const callerOrg = req.user.organizationName || '';
     const page = parseInt(pageStr || '1', 10);
     const limit = parseInt(limitStr || '20', 10);
     const offset = (page - 1) * limit;
 
     try {
-      let conditions: any[] = [eq(schema.auditLogs.ownerId, ownerId)];
+      let conditions: any[] = [eq(schema.auditLogs.organizationName, callerOrg)];
 
       if (severity && severity !== 'All') {
         conditions.push(eq(schema.auditLogs.severity, severity));
@@ -101,6 +101,7 @@ export class SecurityController {
       const newLog = {
         id: `log_${Math.random().toString(36).substring(2, 11)}`,
         ownerId,
+        organizationName: req.user.organizationName || null,
         actorName,
         actorEmail,
         actorInitials: initials,

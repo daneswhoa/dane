@@ -22,12 +22,12 @@ export default function PortalHome() {
         router.push('/login');
       } else {
         const userRole = session ? ((session.user as any)?.role || 'tenant') : 'tenant';
-        if (userRole === 'manager') {
-          router.push(process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000');
+        if (userRole === 'tenant') {
+          router.push('/tenant');
         } else if (userRole === 'contractor') {
           router.push('/contractor');
         } else {
-          router.push('/tenant');
+          router.push(process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000');
         }
       }
     }

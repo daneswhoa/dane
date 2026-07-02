@@ -3,6 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Building2, ArrowRight, ArrowLeft, Loader2, AlertTriangle, Check } from 'lucide-react';
 import DashboardLayout from '../../../components/DashboardLayout';
+import { usePermissionsStore } from '../../../store/usePermissionsStore';
+import { AccessDeniedOverlay } from '../../../components/team/AccessDeniedOverlay';
 
 import Step1Units from './components/Step1Units';
 import Step2Fees from './components/Step2Fees';
@@ -12,6 +14,9 @@ import SuccessScreen from './components/SuccessScreen';
 const API_URL = process.env.NEXT_PUBLIC_API_URL || `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}`;
 
 export default function PropertySetupPage() {
+  const { checkPermission } = usePermissionsStore();
+  const canEdit = checkPermission('Properties', 'Edit');
+
   const params = useParams();
   const propertyId = params.propertyId as string;
 
@@ -98,11 +103,12 @@ export default function PropertySetupPage() {
   };
 
   if (isLoading) return <DashboardLayout><div className="flex h-[80vh] items-center justify-center"><Loader2 className="animate-spin text-coral-500 w-8 h-8" /></div></DashboardLayout>;
+  if (!canEdit) return <DashboardLayout><div className="relative min-h-[70vh]"><AccessDeniedOverlay moduleName="Properties" actionName="Edit" /></div></DashboardLayout>;
   if (error && !property) return <DashboardLayout><div className="p-8 text-center text-red-500">{error}</div></DashboardLayout>;
 
   return (
     <DashboardLayout>
-      <div className="w-full max-w-5xl mx-auto space-y-6 pb-20 p-4 md:p-6 animate-fade-in">
+      <div className="w-full max-w-5xl mx-auto space-y-6 pb-20 p-4 md:p-6 animate-fade-in relative">
         
         {/* Wizard Header (Inside Layout) */}
         {!setupComplete && (

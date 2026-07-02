@@ -1,5 +1,6 @@
 import { eq, and, lte, ilike } from 'drizzle-orm';
 import * as schema from '../../db/schema';
+import { checkToolPermission } from './permissions';
 
 export interface ManageContractorsArgs {
   action: 'browse' | 'bookmark';
@@ -12,14 +13,24 @@ export interface ManageContractorsArgs {
 export class ContractorMarketplaceTool {
   static async execute(
     args: ManageContractorsArgs,
-    context: { db: any; userId: string; userRole: string }
+    context: { db: any; userId: string; userRole: string; user?: any }
   ) {
     if (!context || !context.db) {
       return { success: false, error: 'Database context not available' };
     }
 
-    const { db, userId } = context;
+    const { db, userId, user } = context;
     const { action } = args;
+
+    // Check permissions
+    if (user) {
+      if (action === 'browse' && !checkToolPermission(user, 'Contractors', 'View Directory')) {
+        return { success: false, error: 'Access Denied: You do not have permission to view the contractor directory.' };
+      }
+      if (action === 'bookmark' && !checkToolPermission(user, 'Contractors', 'Add Contractor')) {
+        return { success: false, error: 'Access Denied: You do not have permission to bookmark contractors.' };
+      }
+    }
 
     try {
       if (action === 'browse') {

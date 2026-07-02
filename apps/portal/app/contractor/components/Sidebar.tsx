@@ -20,7 +20,7 @@ export default function Sidebar({ activeTab, onTabChange, profile, newJobsCount,
         </div>
         {!isCollapsed && (
           <div className="flex flex-col overflow-hidden whitespace-nowrap">
-            <span className="font-semibold text-paper-900 dark:text-white tracking-tight leading-tight">landlord.nl</span>
+            <span className="font-semibold text-paper-900 dark:text-white tracking-tight leading-tight">Dane Properties</span>
             <span className="text-[9px] uppercase font-bold text-coral-600 dark:text-coral-400 tracking-widest leading-none">Pro Portal</span>
           </div>
         )}

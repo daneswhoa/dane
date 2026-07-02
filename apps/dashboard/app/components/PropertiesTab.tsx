@@ -241,7 +241,7 @@ export default function PropertiesTab() {
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-paper-900 dark:text-white tracking-tight flex items-center gap-2">
-            <img src="/logomark.png" alt="Landlord.nl" className="h-5 w-auto" />
+            <img src="/logomark.png" alt="Dane Properties" className="h-5 w-auto" />
             Property Portfolio
           </h1>
           <p className="text-xs text-paper-500 dark:text-ink-400 mt-1">Manage and monitor all active assets across regions.</p>

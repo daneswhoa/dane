@@ -137,7 +137,7 @@ const downloadReceiptPDF = (invoice: any, profile: any) => {
       <body>
         <div class="header">
           <div>
-            <div class="brand-name">landlord.nl</div>
+            <div class="brand-name">Dane Properties</div>
             <p style="font-size: 12px; color: #64748b; margin: 5px 0 0 0;">Property Management Platform</p>
           </div>
           <div style="text-align: right;">
@@ -386,7 +386,7 @@ export default function InvoiceModal({ invoiceId, onClose, profile }: InvoiceMod
                 <Building2 className="w-4 h-4" />
               </div>
               <div>
-                <h2 className="text-sm font-bold text-paper-900 dark:text-white leading-tight">Landlord.nl Property Management</h2>
+                <h2 className="text-sm font-bold text-paper-900 dark:text-white leading-tight">Dane Properties</h2>
                 <p className="text-[10px] text-paper-500 dark:text-ink-400">Invoice Details</p>
               </div>
             </div>
@@ -429,7 +429,7 @@ export default function InvoiceModal({ invoiceId, onClose, profile }: InvoiceMod
               <div className="relative w-full aspect-[4/3] rounded-2xl overflow-hidden border border-paper-200 dark:border-ink-800 bg-paper-50 dark:bg-ink-950 mb-6 group shadow-lg">
                 {/* Wordmark logo overlaid in top left */}
                 <div className="absolute top-4 left-4 z-10 bg-white/85 dark:bg-ink-900/85 backdrop-blur-md px-3 py-1 rounded-lg border border-white/20 dark:border-ink-700/30 flex items-center justify-center">
-                  <img src="/wordmark.png" alt="landlord.nl" className="h-4 object-contain brightness-0 dark:brightness-100 invert dark:invert-0" />
+                  <img src="/wordmark.png" alt="Dane Properties" className="h-4 object-contain brightness-0 dark:brightness-100 invert dark:invert-0" />
                 </div>
                 {/* Generated illustration */}
                 <img 

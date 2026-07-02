@@ -52,7 +52,7 @@ export class TenantsController {
         .where(
           and(
             eq(schema.users.role, 'tenant'),
-            eq(schema.properties.ownerId, callerId)
+            eq(schema.properties.organizationName, req.user.organizationName || '')
           )
         );
 
@@ -300,6 +300,7 @@ export class TenantsController {
       await this.db.insert(schema.invitations).values({
         id: inviteCode,
         ownerId,
+        organizationName: req.user.organizationName || null,
         propertyId: body.propertyId,
         unitId: body.unitId,
         email: body.email || null,
@@ -311,7 +312,7 @@ export class TenantsController {
       // Send brand email if email is provided
       if (body.email) {
         const ownerUser = await this.db.select().from(schema.users).where(eq(schema.users.id, ownerId)).limit(1);
-        const orgName = ownerUser[0]?.organizationName || 'Landlord.nl';
+        const orgName = ownerUser[0]?.organizationName || 'Dane Properties';
         
         const propCheck = await this.db.select({ name: schema.properties.name }).from(schema.properties).where(eq(schema.properties.id, body.propertyId)).limit(1);
         const propName = propCheck[0]?.name || 'your new home';
@@ -351,7 +352,7 @@ export class TenantsController {
     }
   }
 
-  @Post('invites/verify')
+  @Post(['invites/verify', 'tenants/invites/verify'])
   async verifyInvite(@Body() body: { code: string }) {
     if (!body.code) {
       throw new BadRequestException('code is required.');
@@ -397,6 +398,7 @@ export class TenantsController {
         try { if (unit[0].moveInFeeDetails) moveInDetails = JSON.parse(unit[0].moveInFeeDetails as string); } catch(e){}
 
         return {
+          email: invite.email,
           targetRole: 'tenant',
           propertyName: prop[0].name,
           managerName: owner.length > 0 ? owner[0].name : 'Sophia AI Management',
@@ -415,8 +417,9 @@ export class TenantsController {
       } else {
         const owner = await this.db.select().from(schema.users).where(eq(schema.users.id, invite.ownerId)).limit(1);
         return {
+          email: invite.email,
           targetRole: invite.targetRole || 'Team Member',
-          propertyName: owner.length > 0 ? (owner[0].organizationName || 'Landlord.nl') : 'Landlord.nl',
+          propertyName: owner.length > 0 ? (owner[0].organizationName || 'Dane Properties') : 'Dane Properties',
           managerName: owner.length > 0 ? owner[0].name : 'Sophia AI Management',
           unitDetails: `Team Access - ${invite.targetRole}`,
           monthlyRent: 'N/A',
@@ -431,7 +434,7 @@ export class TenantsController {
     }
   }
 
-  @Post('invites/accept')
+  @Post(['invites/accept', 'tenants/invites/accept'])
   async acceptInvite(@Req() req: any, @Body() body: { code: string; tenantId?: string }) {
     if (!body.code) {
       throw new BadRequestException('code is required.');
@@ -464,6 +467,10 @@ export class TenantsController {
           } else {
             throw new BadRequestException('Invite code has already been used.');
           }
+        }
+
+        if (req.user.email.toLowerCase() !== invite.email.toLowerCase()) {
+          throw new BadRequestException('This invite code was issued to a different email address.');
         }
 
         if (invite.expiresAt < new Date()) {
@@ -573,6 +580,7 @@ export class TenantsController {
           unitId: invite.unitId,
           propertyId: invite.propertyId,
           ownerId: invite.ownerId,
+          organizationName: invite.organizationName || null,
           amount: totalAmount,
           description: invoiceDescription.trim(),
           status: 'PENDING',
@@ -681,15 +689,13 @@ export class TenantsController {
 
         // 2. Enforce permission: manager owns/manages property of destUnit
         let targetOwnerId = callerId;
-        if (callerRole !== 'manager') {
-          const relation = await tx
-            .select()
-            .from(schema.managerRelations)
-            .where(eq(schema.managerRelations.managerId, callerId))
-            .limit(1);
-          if (relation.length > 0) {
-            targetOwnerId = relation[0].ownerId;
-          }
+        const relation = await tx
+          .select()
+          .from(schema.managerRelations)
+          .where(eq(schema.managerRelations.managerId, callerId))
+          .limit(1);
+        if (relation.length > 0) {
+          targetOwnerId = relation[0].ownerId;
         }
 
         if (destUnit.ownerId !== targetOwnerId) {

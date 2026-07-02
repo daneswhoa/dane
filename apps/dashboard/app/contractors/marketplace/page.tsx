@@ -201,7 +201,7 @@ export default function ContractorsMarketplacePage() {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-paper-150 dark:border-ink-800 pb-5">
           <div className="space-y-1">
             <h1 className="text-lg font-bold text-paper-900 dark:text-white flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-coral-500" /> Landlord.nl Contractor Marketplace
+              <Sparkles className="w-5 h-5 text-coral-500" /> Dane Properties Contractor Marketplace
             </h1>
             <p className="text-xs text-paper-500 dark:text-ink-400">
               Browse, bookmark, and assign local certified trade professionals. Only showing contractors who have completed setup profiles.

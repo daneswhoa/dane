@@ -1,5 +1,6 @@
 import { eq } from 'drizzle-orm';
 import * as schema from '../../db/schema';
+import { checkToolPermission } from './permissions';
 
 export interface ManageInvoiceArgs {
   invoiceId: string;
@@ -12,13 +13,19 @@ export interface ManageInvoiceArgs {
 export class ManageInvoiceTool {
   static async execute(
     args: ManageInvoiceArgs,
-    context: { db: any; userId: string; userRole: string }
+    context: { db: any; userId: string; userRole: string; user?: any }
   ) {
     if (!context || !context.db) {
       return { success: false, error: 'Database context not available' };
     }
 
-    const { db, userId } = context;
+    const { db, userId, user } = context;
+
+    // Check permissions
+    if (user && !checkToolPermission(user, 'Finance', 'Process Payments')) {
+      return { success: false, error: 'Access Denied: You do not have permission to manage/update invoices.' };
+    }
+
     const { invoiceId, action } = args;
 
     try {

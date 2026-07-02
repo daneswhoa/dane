@@ -37,9 +37,9 @@ function LoginForm() {
   }, [session]);
 
   const getRoleLabel = (role: string) => {
-    if (role === 'manager') return 'Manager';
     if (role === 'contractor') return 'Contractor';
-    return 'Tenant';
+    if (role === 'tenant') return 'Tenant';
+    return 'Manager';
   };
 
   const handleGoToDashboard = (role: string) => {
@@ -47,12 +47,12 @@ function LoginForm() {
       router.push(redirectUrl);
       return;
     }
-    if (role === 'manager') {
-      router.push(process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000');
-    } else if (role === 'contractor') {
+    if (role === 'contractor') {
       router.push('/contractor');
-    } else {
+    } else if (role === 'tenant') {
       router.push('/tenant');
+    } else {
+      router.push(process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000');
     }
   };
 
@@ -147,11 +147,11 @@ function LoginForm() {
         password,
         rememberMe: rememberMe
       }, {
-        onSuccess: (ctx) => {
+        onSuccess: (ctx: any) => {
           setIsLoading(false);
           handleGoToDashboard(ctx.data?.user?.role || 'tenant');
         },
-        onError: (ctx) => {
+        onError: (ctx: any) => {
           setIsLoading(false);
           setErrorMessage(ctx.error.message || 'Incorrect email or password. Please try again.');
         }

@@ -19,11 +19,18 @@ export class GetTenantInvoicesTool {
     const { db, userId } = context;
 
     try {
+      const userExist = await db.select().from(schema.users).where(eq(schema.users.id, userId)).limit(1);
+      const orgName = userExist[0]?.organizationName || null;
+
       if (!args.tenantEmail && !args.tenantId && !args.unitId) {
         return { success: false, error: 'Must provide tenantEmail, tenantId, or unitId to fetch invoices.' };
       }
 
-      let conditions: any[] = [eq(schema.invoices.ownerId, userId)];
+      let conditions: any[] = [
+        orgName
+          ? eq(schema.invoices.organizationName, orgName)
+          : eq(schema.invoices.ownerId, userId)
+      ];
 
       if (args.tenantId) {
         conditions.push(eq(schema.invoices.tenantId, args.tenantId));
@@ -33,10 +40,6 @@ export class GetTenantInvoicesTool {
         conditions.push(eq(schema.invoices.unitId, args.unitId));
       }
 
-      // If we provided multiple, we'd need 'and' logic, but usually it's one of them.
-      // We will just use the first one matched above.
-      const condition = conditions.length === 2 ? conditions[1] : conditions[1]; // We always want the filter plus ownerId. Wait, better to use and().
-      
       const invoicesList = await db
         .select()
         .from(schema.invoices)

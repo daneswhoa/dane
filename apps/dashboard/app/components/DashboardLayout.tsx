@@ -31,6 +31,28 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [metrics, setMetrics] = useState<SidebarMetrics | null>(null);
   const [socket, setSocket] = useState<any>(null);
   const [redirectPopup, setRedirectPopup] = useState<{ active: boolean; path: string; secondsLeft: number } | null>(null);
+  const [profileOrgName, setProfileOrgName] = useState<string | null>(null);
+  const [loadingProfile, setLoadingProfile] = useState(true);
+
+  useEffect(() => {
+    if (!session?.user) return;
+    const fetchProfile = async () => {
+      try {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/profile`, { credentials: 'include' });
+        if (res.ok) {
+          const data = await res.json();
+          setProfileOrgName(data.organizationName);
+          // Sync permissions using the full profile from DB (which includes the real role)
+          syncUser(data);
+        }
+      } catch (e) {
+        console.error('Failed to fetch profile:', e);
+      } finally {
+        setLoadingProfile(false);
+      }
+    };
+    fetchProfile();
+  }, [session]);
 
   // Sync client-side navigation logging to LocalStorage
   useEffect(() => {
@@ -125,11 +147,9 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     setRedirectPopup(null);
   };
 
-  useEffect(() => {
-    if (session?.user) {
-      syncUser(session.user);
-    }
-  }, [session, syncUser]);
+  // NOTE: syncUser is called inside the profile fetch effect above,
+  // using the full DB profile (which includes the real `role` field).
+  // Do NOT call syncUser(session.user) — better-auth session does not include custom fields.
 
   useEffect(() => {
     if (!session?.user) return;
@@ -205,7 +225,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
     const facts = [
       "Sophia can automatically monitor utility usage anomalies to prevent unexpected leaks.",
-      "Landlords using Landlord.nl report up to 40% faster maintenance ticket resolution.",
+      "Landlords using Dane Properties report up to 40% faster maintenance ticket resolution.",
       "Did you know? Consistent tenant communications reduce lease renewal drop-offs by 25%.",
       "You can configure quiet hours to silence non-emergency maintenance notifications."
     ];
@@ -221,9 +241,12 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         const loginUrl = process.env.NEXT_PUBLIC_PORTAL_URL || 'http://localhost:3001';
         const currentUrl = typeof window !== 'undefined' ? window.location.origin + window.location.pathname : '';
         router.push(`${loginUrl}/login?redirect=${encodeURIComponent(currentUrl)}`);
-      } else if ((session.user as any)?.role !== 'manager') {
-        const loginUrl = process.env.NEXT_PUBLIC_PORTAL_URL || 'http://localhost:3001';
-        router.push(loginUrl);
+      } else {
+        const role = (session.user as any)?.role;
+        if (role === 'tenant' || role === 'contractor') {
+          const portalUrl = process.env.NEXT_PUBLIC_PORTAL_URL || 'http://localhost:3001';
+          router.push(role === 'tenant' ? `${portalUrl}/tenant` : `${portalUrl}/contractor`);
+        }
       }
     }
   }, [session, isPending, router]);
@@ -398,7 +421,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const crumbs = getCrumbs(activeTab);
 
   // Check if organization exists
-  const hasOrganization = !!(session.user as any)?.organizationName;
+  const hasOrganization = loadingProfile ? true : !!profileOrgName;
 
   return (
     <div className="flex min-h-screen text-sm bg-paper-50 dark:bg-ink-900 text-paper-900 dark:text-ink-50 transition-colors duration-200 w-full relative">
@@ -412,7 +435,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         collapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
         onOpenProfileSettings={() => setIsProfileSettingsOpen(true)}
-        userOrganizationName={(session.user as any)?.organizationName}
+        userOrganizationName={profileOrgName || (session.user as any)?.organizationName}
         userOrganizationLogo={(session.user as any)?.image}
         metrics={metrics}
         mobileOpen={mobileSidebarOpen}
@@ -428,6 +451,17 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           crumbs={crumbs}
           onToggleMobileSidebar={() => setMobileSidebarOpen(!mobileSidebarOpen)}
         />
+        {!hasOrganization && (
+          <div className="bg-coral-500/10 dark:bg-coral-500/20 text-coral-600 dark:text-coral-400 text-xs py-3 px-4 text-center font-bold border-b border-coral-500/20 flex items-center justify-center gap-2 relative z-30 animate-fade-in">
+            <span>⚠️ You don't have an active organization yet. Create one in the Team settings to unlock all features.</span>
+            <button 
+              onClick={() => navigateToTab('team')} 
+              className="underline hover:text-coral-700 dark:hover:text-coral-300 transition-colors font-extrabold"
+            >
+              Set up organization &rarr;
+            </button>
+          </div>
+        )}
         <div className="flex-1 overflow-y-auto">
           {children}
         </div>
@@ -461,57 +495,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           onClose={() => setIsProfileSettingsOpen(false)}
           onSignOut={handleSignOut}
         />
-      )}
-
-      {/* Forced Organization Setup Modal */}
-      {!hasOrganization && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 sm:p-6 animate-fade-in backdrop-blur-md bg-paper-900/80 dark:bg-ink-950/90">
-          <div className="bg-white dark:bg-ink-900 border border-paper-200 dark:border-ink-800 rounded-2xl p-8 text-center space-y-6 shadow-2xl max-w-xl w-full animate-slide-up">
-            <div className="w-16 h-16 bg-coral-50 dark:bg-coral-500/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-coral-100 dark:border-coral-500/20 shadow-inner">
-              <Building className="w-8 h-8 text-coral-500" />
-            </div>
-            <div>
-              <h3 className="text-xl font-bold text-paper-900 dark:text-white mb-2">Welcome to Landlord.nl</h3>
-              <p className="text-sm text-paper-500 dark:text-ink-400 max-w-md mx-auto">
-                Before you can access your dashboard, please set up your organization profile.
-              </p>
-            </div>
-            
-            <form onSubmit={handleSetupOrganization} className="space-y-4 text-left pt-4">
-              {setupError && (
-                <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-3 rounded-lg text-xs font-semibold border border-red-200 dark:border-red-900/50">
-                  {setupError}
-                </div>
-              )}
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-paper-700 dark:text-ink-300">Organization Name *</label>
-                <input type="text" name="orgName" placeholder="e.g. Westside Realty Group" required className="w-full px-4 py-2.5 bg-paper-50 dark:bg-ink-950 border border-paper-200 dark:border-ink-800 rounded-lg text-sm focus:ring-2 focus:ring-coral-500/20 focus:border-coral-500 transition-colors dark:text-white" />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-paper-700 dark:text-ink-300">Your Username *</label>
-                <input type="text" name="username" defaultValue={(session.user as any)?.username || ''} required className="w-full px-4 py-2.5 bg-paper-50 dark:bg-ink-950 border border-paper-200 dark:border-ink-800 rounded-lg text-sm focus:ring-2 focus:ring-coral-500/20 focus:border-coral-500 transition-colors dark:text-white" />
-              </div>
-              <div className="space-y-1.5 pt-2">
-                <label className="text-xs font-bold text-paper-700 dark:text-ink-300">Organization Logo (Optional)</label>
-                <div className="flex items-center justify-center w-full mt-1">
-                  <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-paper-200 dark:border-ink-700 border-dashed rounded-lg cursor-pointer bg-paper-50 dark:bg-ink-950/50 hover:bg-paper-100 dark:hover:bg-ink-900 transition-colors">
-                    <div className="flex flex-col items-center justify-center pt-5 pb-6 text-paper-500 dark:text-ink-400">
-                      <Camera className="w-6 h-6 mb-2 text-paper-400 dark:text-ink-500" />
-                      <p className="text-xs font-medium">Click to upload logo</p>
-                    </div>
-                    <input type="file" name="logo" className="hidden" accept="image/*" />
-                  </label>
-                </div>
-              </div>
-              
-              <div className="pt-6">
-                <button type="submit" disabled={setupLoading} className="w-full px-5 py-3 bg-coral-500 hover:bg-coral-600 text-white text-sm font-bold rounded-lg shadow-lg shadow-coral-500/30 transition-all hover:-translate-y-0.5 disabled:opacity-50">
-                  {setupLoading ? 'Setting up...' : 'Complete Setup & Enter Dashboard'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
       )}
     </div>
   );

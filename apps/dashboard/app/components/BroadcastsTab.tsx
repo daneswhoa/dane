@@ -107,7 +107,7 @@ export default function BroadcastsTab() {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-semibold text-paper-900 dark:text-white tracking-tight">Email Center</h1>
-            <span className="px-2 py-0.5 rounded-full border border-paper-200 dark:border-ink-700 bg-paper-50 dark:bg-ink-800 text-[10px] font-medium text-paper-500 dark:text-ink-400">Powered by Landlord.nl Mail</span>
+            <span className="px-2 py-0.5 rounded-full border border-paper-200 dark:border-ink-700 bg-paper-50 dark:bg-ink-800 text-[10px] font-medium text-paper-500 dark:text-ink-400">Powered by Dane Properties Mail</span>
           </div>
           <p className="text-xs text-paper-500 dark:text-ink-400 mt-0.5">Manage mass communications, newsletters, and view email performance.</p>
         </div>

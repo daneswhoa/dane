@@ -3,20 +3,46 @@
 import React, { useState } from 'react';
 import { Megaphone, MessageSquare, History, Plus, Users, Search, Clock, CheckCircle2, ChevronRight, X } from 'lucide-react';
 import { ComposeBroadcastModal } from './communication/ComposeBroadcastModal';
+import { usePermissionsStore } from '../store/usePermissionsStore';
+import { AccessDeniedOverlay } from './team/AccessDeniedOverlay';
 
 export default function CommunicationTab() {
+  const { checkPermission } = usePermissionsStore();
+  const canSend = checkPermission('Communication', 'Send Messages');
+  const canAnnounce = checkPermission('Communication', 'Create Announcements');
+  const canManageTemplates = checkPermission('Communication', 'Manage Templates');
+
   const [activeSubTab, setActiveSubTab] = useState<'broadcasts' | 'templates'>('broadcasts');
   const [isComposeOpen, setIsComposeOpen] = useState(false);
+  const [deniedAction, setDeniedAction] = useState<string | null>(null);
+
+  if (!canSend && !canAnnounce && !canManageTemplates) {
+    return <AccessDeniedOverlay moduleName="Communication" actionName="Send Messages" />;
+  }
 
   return (
-    <div className="p-6 max-w-6xl mx-auto w-full space-y-6 pb-20 animate-fade-in">
+    <div className="p-6 max-w-6xl mx-auto w-full space-y-6 pb-20 animate-fade-in relative">
+      {deniedAction && (
+        <AccessDeniedOverlay 
+          moduleName="Communication" 
+          actionName={deniedAction} 
+          onClose={() => setDeniedAction(null)} 
+        />
+      )}
+
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-paper-900 dark:text-white tracking-tight">Communication</h1>
           <p className="text-paper-500 dark:text-ink-400 mt-1">Send broadcasts and manage messaging templates across your portfolio.</p>
         </div>
         <button 
-          onClick={() => setIsComposeOpen(true)}
+          onClick={() => {
+            if (!canAnnounce) {
+              setDeniedAction('Create Announcements');
+            } else {
+              setIsComposeOpen(true);
+            }
+          }}
           className="flex items-center gap-1.5 px-4 py-2 bg-coral-500 hover:bg-coral-600 text-white text-xs font-semibold rounded-lg transition-all shadow-sm shadow-coral-500/20"
         >
           <Plus className="w-4 h-4" /> Compose Broadcast
@@ -32,7 +58,13 @@ export default function CommunicationTab() {
           {activeSubTab === 'broadcasts' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-coral-500 rounded-t-full" />}
         </button>
         <button
-          onClick={() => setActiveSubTab('templates')}
+          onClick={() => {
+            if (!canManageTemplates) {
+              setDeniedAction('Manage Templates');
+            } else {
+              setActiveSubTab('templates');
+            }
+          }}
           className={`px-5 py-3 text-sm font-semibold transition-colors relative ${activeSubTab === 'templates' ? 'text-coral-500' : 'text-paper-500 dark:text-ink-400 hover:text-paper-900 dark:hover:text-white'}`}
         >
           <div className="flex items-center gap-2"><MessageSquare className="w-4 h-4" /> Templates</div>

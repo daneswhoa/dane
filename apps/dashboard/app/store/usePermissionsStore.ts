@@ -46,8 +46,8 @@ export const usePermissionsStore = create<PermissionsStore>((set, get) => ({
   syncUser: (user) => {
     if (!user) return;
     
-    // Managers/Landlords have full permissions by default
-    if (user.role === 'manager' || user.role === 'landlord') {
+    // Owners (Managers/Landlords without custom permissions) have full permissions by default
+    if ((user.role === 'manager' || user.role === 'landlord') && !user.permissions) {
       const fullPerms = {} as any;
       MODULE_TABS.forEach(mod => {
         fullPerms[mod.name] = {};

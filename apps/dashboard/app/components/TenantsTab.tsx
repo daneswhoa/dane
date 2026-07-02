@@ -6,6 +6,8 @@ import { TenantKpiCards } from './tenants/TenantKpiCards';
 import { TenantsTable } from './tenants/TenantsTable';
 import { InviteTenantModal } from './tenants/InviteTenantModal';
 import { MoveTenantModal } from './tenants/MoveTenantModal';
+import { usePermissionsStore } from '../store/usePermissionsStore';
+import { AccessDeniedOverlay } from './team/AccessDeniedOverlay';
 
 interface Tenant {
   id: string;
@@ -101,6 +103,11 @@ const defaultTenants: Tenant[] = [
   },
 ];
 export default function TenantsTab() {
+  const { checkPermission } = usePermissionsStore();
+  const canView = checkPermission('Tenants', 'View Tenants');
+  const canAddTenant = checkPermission('Tenants', 'Add Tenant');
+  const canManageLeases = checkPermission('Tenants', 'Manage Leases');
+
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [filterQuery, setFilterQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
@@ -112,6 +119,7 @@ export default function TenantsTab() {
   const itemsPerPage = 8;
 
   const [movingTenant, setMovingTenant] = useState<{ id: string; name: string; unitId: string; propertyName: string } | null>(null);
+  const [deniedAction, setDeniedAction] = useState<string | null>(null);
 
   async function loadTenants() {
     setIsLoading(true);
@@ -179,8 +187,20 @@ export default function TenantsTab() {
 
   const uniqueProperties = Array.from(new Set(tenants.map(t => t.propertyName))).filter(Boolean);
 
+  if (!canView) {
+    return <AccessDeniedOverlay moduleName="Tenants" actionName="View Tenants" />;
+  }
+
   return (
-    <div className="p-4 md:p-6 space-y-6 max-w-[1600px] mx-auto w-full flex-1 animate-fade-in">
+    <div className="p-4 md:p-6 space-y-6 max-w-[1600px] mx-auto w-full flex-1 animate-fade-in relative">
+      {deniedAction && (
+        <AccessDeniedOverlay 
+          moduleName="Tenants" 
+          actionName={deniedAction} 
+          onClose={() => setDeniedAction(null)} 
+        />
+      )}
+
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold text-paper-900 dark:text-white tracking-tight">Tenant Directory</h1>
@@ -190,7 +210,16 @@ export default function TenantsTab() {
           <button onClick={handleExportCSV} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-paper-200 dark:border-ink-700 bg-white dark:bg-ink-800 text-paper-700 dark:text-ink-200 rounded-md hover:bg-paper-50 dark:hover:bg-ink-700 transition-all shadow-sm">
             <Download className="w-3.5 h-3.5" /> Export CSV
           </button>
-          <button onClick={() => setIsInviteModalOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-coral-500 text-white rounded-md hover:bg-coral-600 transition-all shadow-sm shadow-coral-500/20">
+          <button 
+            onClick={() => {
+              if (!canAddTenant) {
+                setDeniedAction('Add Tenant');
+              } else {
+                setIsInviteModalOpen(true);
+              }
+            }} 
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-coral-500 text-white rounded-md hover:bg-coral-600 transition-all shadow-sm shadow-coral-500/20"
+          >
             <UserPlus className="w-3.5 h-3.5" /> Add Tenant
           </button>
         </div>
@@ -269,7 +298,13 @@ export default function TenantsTab() {
             {paginatedTenants.length > 0 ? (
               <TenantsTable 
                 tenants={paginatedTenants} 
-                onMoveTenant={setMovingTenant}
+                onMoveTenant={(tenant) => {
+                  if (!canManageLeases) {
+                    setDeniedAction('Manage Leases');
+                  } else {
+                    setMovingTenant(tenant);
+                  }
+                }}
               />
             ) : (
               <div className="p-16 text-center text-paper-500 dark:text-ink-400 flex flex-col items-center justify-center gap-2">

@@ -1,5 +1,6 @@
 import { eq, and, or } from 'drizzle-orm';
 import * as schema from '../../db/schema';
+import { checkToolPermission } from './permissions';
 
 export interface AddInvoiceArgs {
   propertyId?: string;
@@ -14,16 +15,25 @@ export interface AddInvoiceArgs {
 export class AddInvoiceTool {
   static async execute(
     args: AddInvoiceArgs,
-    context: { db: any; userId: string; userRole: string }
+    context: { db: any; userId: string; userRole: string; user?: any }
   ) {
     if (!context || !context.db) {
       return { success: false, error: 'Database context not available' };
     }
 
-    const { db, userId } = context;
+    const { db, userId, user } = context;
+
+    // Check permissions
+    if (user && !checkToolPermission(user, 'Finance', 'Process Payments')) {
+      return { success: false, error: 'Access Denied: You do not have permission to issue invoices/payments.' };
+    }
+
     const { propertyId, unitIdOrLabel, tenantEmail, amount, description, dueDateStr, type = 'Fee' } = args;
 
     try {
+      const userExist = await db.select().from(schema.users).where(eq(schema.users.id, userId)).limit(1);
+      const orgName = userExist[0]?.organizationName || null;
+
       let tenantUser = null;
       let targetUnit = null;
       let targetProperty = null;
@@ -92,6 +102,7 @@ export class AddInvoiceTool {
         unitId: targetUnit ? targetUnit.id : null,
         propertyId: targetProperty ? targetProperty.id : null,
         ownerId: userId,
+        organizationName: orgName,
         amount,
         amountPaid: 0,
         description,
@@ -103,6 +114,7 @@ export class AddInvoiceTool {
       await db.insert(schema.auditLogs).values({
         id: 'audit-' + Math.random().toString(36).substring(2, 9),
         ownerId: userId,
+        organizationName: orgName,
         actorName: 'Sophia AI',
         actorEmail: 'sophia@landlord.nl',
         actorInitials: 'SA',

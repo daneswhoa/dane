@@ -80,6 +80,7 @@ export const properties = pgTable('properties', {
   name: varchar('name', { length: 255 }).notNull(),
   address: varchar('address', { length: 500 }).notNull(),
   ownerId: varchar('owner_id', { length: 255 }).notNull().references(() => users.id),
+  organizationName: varchar('organization_name', { length: 255 }),
   unitsCount: integer('units_count').notNull().default(0),
   status: varchar('status', { length: 50 }).notNull().default('active'),
   photoUrl: varchar('photo_url', { length: 512 }),
@@ -87,6 +88,7 @@ export const properties = pgTable('properties', {
   createdAt: timestamp('created_at').defaultNow(),
 }, (table) => [
   index('properties_owner_id_idx').on(table.ownerId),
+  index('properties_organization_name_idx').on(table.organizationName),
 ]);
 
 // ── Units ──
@@ -123,6 +125,7 @@ export const invoices = pgTable('invoices', {
   unitId: varchar('unit_id', { length: 255 }).references(() => units.id),
   propertyId: varchar('property_id', { length: 255 }).references(() => properties.id),
   ownerId: varchar('owner_id', { length: 255 }).notNull().references(() => users.id),
+  organizationName: varchar('organization_name', { length: 255 }),
   amount: numericNumber('amount').notNull(),
   amountPaid: numericNumber('amount_paid').notNull().default(0),
   description: text('description').notNull(),
@@ -134,6 +137,7 @@ export const invoices = pgTable('invoices', {
   index('invoices_tenant_id_idx').on(table.tenantId),
   index('invoices_property_id_idx').on(table.propertyId),
   index('invoices_owner_id_idx').on(table.ownerId),
+  index('invoices_organization_name_idx').on(table.organizationName),
 ]);
 
 // ── Tickets (Maintenance) ──
@@ -150,6 +154,7 @@ export const tickets = pgTable('tickets', {
   propertyId: varchar('property_id', { length: 255 }).references(() => properties.id),
   unitId: varchar('unit_id', { length: 255 }).references(() => units.id),
   ownerId: varchar('owner_id', { length: 255 }).notNull().references(() => users.id),
+  organizationName: varchar('organization_name', { length: 255 }),
   contractorId: varchar('contractor_id', { length: 255 }).references(() => users.id),
   amount: numericNumber('amount'),
   hourlyRate: numericNumber('hourly_rate'),
@@ -167,6 +172,7 @@ export const tickets = pgTable('tickets', {
   index('tickets_tenant_id_idx').on(table.tenantId),
   index('tickets_property_id_idx').on(table.propertyId),
   index('tickets_owner_id_idx').on(table.ownerId),
+  index('tickets_organization_name_idx').on(table.organizationName),
 ]);
 
 // ── Contractors ──
@@ -241,6 +247,7 @@ export const agentActivityLog = pgTable('agent_activity_log', {
 export const invitations = pgTable('invitations', {
   id: varchar('id', { length: 255 }).primaryKey(),
   ownerId: varchar('owner_id', { length: 255 }).notNull(),
+  organizationName: varchar('organization_name', { length: 255 }),
   email: varchar('email', { length: 255 }),
   targetRole: varchar('target_role', { length: 50 }).notNull().default('tenant'),
   propertyId: varchar('property_id', { length: 255 }),
@@ -250,7 +257,10 @@ export const invitations = pgTable('invitations', {
   used: boolean('used').default(false),
   expiresAt: timestamp('expires_at').notNull(),
   createdAt: timestamp('created_at').defaultNow(),
-});
+}, (table) => [
+  index('invitations_owner_id_idx').on(table.ownerId),
+  index('invitations_organization_name_idx').on(table.organizationName),
+]);
 
 // ── Manager Relations ──
 
@@ -269,6 +279,7 @@ export const managerRelations = pgTable('manager_relations', {
 export const emailTemplates = pgTable('email_templates', {
   id: varchar('id', { length: 255 }).primaryKey(),
   ownerId: varchar('owner_id', { length: 255 }).notNull(),
+  organizationName: varchar('organization_name', { length: 255 }),
   name: varchar('name', { length: 255 }).notNull(),
   subject: varchar('subject', { length: 255 }).notNull(),
   body: text('body').notNull(),
@@ -276,6 +287,7 @@ export const emailTemplates = pgTable('email_templates', {
   createdAt: timestamp('created_at').defaultNow(),
 }, (table) => [
   index('email_templates_owner_id_idx').on(table.ownerId),
+  index('email_templates_organization_name_idx').on(table.organizationName),
 ]);
 
 // ── Campaigns ──
@@ -283,6 +295,7 @@ export const emailTemplates = pgTable('email_templates', {
 export const campaigns = pgTable('campaigns', {
   id: varchar('id', { length: 255 }).primaryKey(),
   ownerId: varchar('owner_id', { length: 255 }).notNull(),
+  organizationName: varchar('organization_name', { length: 255 }),
   title: varchar('title', { length: 255 }).notNull(),
   subject: varchar('subject', { length: 255 }).notNull(),
   body: text('body').notNull(),
@@ -294,11 +307,13 @@ export const campaigns = pgTable('campaigns', {
   createdAt: timestamp('created_at').defaultNow(),
 }, (table) => [
   index('campaigns_owner_id_idx').on(table.ownerId),
+  index('campaigns_organization_name_idx').on(table.organizationName),
 ]);
 
 export const auditLogs = pgTable('audit_logs', {
   id: varchar('id', { length: 255 }).primaryKey(),
   ownerId: varchar('owner_id', { length: 255 }).notNull().references(() => users.id),
+  organizationName: varchar('organization_name', { length: 255 }),
   actorName: varchar('actor_name', { length: 255 }).notNull(),
   actorEmail: varchar('actor_email', { length: 255 }).notNull(),
   actorInitials: varchar('actor_initials', { length: 50 }).notNull(),
@@ -312,11 +327,13 @@ export const auditLogs = pgTable('audit_logs', {
   timestamp: timestamp('timestamp').defaultNow().notNull(),
 }, (table) => [
   index('audit_logs_owner_id_idx').on(table.ownerId),
+  index('audit_logs_organization_name_idx').on(table.organizationName),
 ]);
 
 export const automations = pgTable('automations', {
   id: varchar('id', { length: 255 }).primaryKey(),
   ownerId: varchar('owner_id', { length: 255 }).notNull().references(() => users.id),
+  organizationName: varchar('organization_name', { length: 255 }),
   name: varchar('name', { length: 255 }).notNull(),
   description: text('description').notNull(),
   triggerEvent: varchar('trigger_event', { length: 255 }).notNull(),
@@ -328,6 +345,7 @@ export const automations = pgTable('automations', {
   createdAt: timestamp('created_at').defaultNow(),
 }, (table) => [
   index('automations_owner_id_idx').on(table.ownerId),
+  index('automations_organization_name_idx').on(table.organizationName),
 ]);
 
 export const notifications = pgTable('notifications', {
@@ -345,6 +363,7 @@ export const notifications = pgTable('notifications', {
 export const announcements = pgTable('announcements', {
   id: varchar('id', { length: 255 }).primaryKey(),
   ownerId: varchar('owner_id', { length: 255 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  organizationName: varchar('organization_name', { length: 255 }),
   title: varchar('title', { length: 255 }).notNull(),
   content: text('content').notNull(),
   audienceType: varchar('audience_type', { length: 50 }).notNull(), // 'all' | 'property'
@@ -354,6 +373,7 @@ export const announcements = pgTable('announcements', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (table) => [
   index('announcements_owner_id_idx').on(table.ownerId),
+  index('announcements_organization_name_idx').on(table.organizationName),
 ]);
 
 export const userNotes = pgTable('user_notes', {

@@ -167,11 +167,11 @@ export const toolsRegistry: ToolDefinition[] = [
   },
   {
     name: 'manageMaintenanceTickets',
-    description: 'Handles all basic CRUD operations on maintenance tickets. Use this to fetch tickets (filter by status/urgency), create new tickets for tenants, update a ticket status, or close and rate a ticket.',
+    description: 'Handles all basic CRUD operations on maintenance tickets. Use this to fetch tickets (filter by status/urgency), create new tickets for tenants, update a ticket status, close and rate a ticket, or reject a ticket.',
     parameters: {
       type: 'object',
       properties: {
-        action: { type: 'string', enum: ['fetch', 'create', 'update_status', 'close_and_rate'], description: 'The CRUD action to perform.' },
+        action: { type: 'string', enum: ['fetch', 'create', 'update_status', 'close_and_rate', 'reject'], description: 'The CRUD/reject action to perform.' },
         status: { type: 'string', description: 'For fetch or update_status: the status of the ticket (e.g., open, assigned, closed).' },
         urgency: { type: 'string', description: 'For fetch or create: urgency level (low, medium, high, emergency).' },
         propertyId: { type: 'string', description: 'For fetch or create: ID of the associated property.' },
@@ -179,10 +179,11 @@ export const toolsRegistry: ToolDefinition[] = [
         description: { type: 'string', description: 'For create: detailed description of the issue.' },
         category: { type: 'string', description: 'For create: category (Plumbing, Electrical, General).' },
         unitId: { type: 'string', description: 'For create: ID of the unit.' },
-        ticketId: { type: 'string', description: 'For update_status or close_and_rate: the target ticket ID.' },
+        ticketId: { type: 'string', description: 'For update_status, close_and_rate, or reject: the target ticket ID.' },
         newStatus: { type: 'string', description: 'For update_status: the new status string.' },
         rating: { type: 'number', description: 'For close_and_rate: rating score out of 5.' },
-        ratingComment: { type: 'string', description: 'For close_and_rate: feedback text.' }
+        ratingComment: { type: 'string', description: 'For close_and_rate: feedback text.' },
+        message: { type: 'string', description: 'For reject: the rejection explanation message sent to the tenant.' }
       },
       required: ['action']
     },
@@ -217,8 +218,9 @@ export const toolsRegistry: ToolDefinition[] = [
         action: { type: 'string', enum: ['assign', 'request_quote', 'approve_and_settle', 'notify_tenant'], description: 'Action to perform.' },
         ticketId: { type: 'string', description: 'The target ticket ID.' },
         contractorId: { type: 'string', description: 'For assign or request_quote: ID of the contractor.' },
+        hourlyRate: { type: 'number', description: 'For assign: hourly quote price in euros.' },
         maxAuthorization: { type: 'number', description: 'For assign: maximum authorized budget before asking for approval.' },
-        settleAction: { type: 'string', enum: ['pay_now', 'approve_quote_only', 'pay_and_bill_tenant', 'bill_tenant_only'], description: 'For approve_and_settle: the financial routing logic.' },
+        settleAction: { type: 'string', enum: ['pay_now', 'approve_quote_only', 'pay_and_bill_tenant', 'bill_tenant_only', 'pay_at_company_expense', 'pay_and_charge_tenant', 'finalize_without_paying'], description: 'For approve_and_settle: the financial routing logic.' },
         amount: { type: 'number', description: 'For approve_and_settle: the total amount in euros.' },
         message: { type: 'string', description: 'For notify_tenant: message body to send to the tenant regarding scheduling.' }
       },

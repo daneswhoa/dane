@@ -28,6 +28,8 @@ import {
   X,
   ShieldCheck
 } from 'lucide-react';
+import { usePermissionsStore } from '../store/usePermissionsStore';
+import { AccessDeniedOverlay } from './team/AccessDeniedOverlay';
 
 interface Contractor {
   id: string;
@@ -52,6 +54,11 @@ interface MaintenanceTicket {
 }
 
 export default function ContractorsTab() {
+  const { checkPermission } = usePermissionsStore();
+  const canView = checkPermission('Contractors', 'View Directory');
+  const canAddContractor = checkPermission('Contractors', 'Add Contractor');
+  const canAssign = checkPermission('Maintenance', 'Assign Contractor');
+
   const [contractors, setContractors] = useState<Contractor[]>([]);
   const [tickets, setTickets] = useState<MaintenanceTicket[]>([]);
   const [loading, setLoading] = useState(true);
@@ -61,6 +68,7 @@ export default function ContractorsTab() {
   const [errorMessage, setErrorMessage] = useState('');
   const [errorTitle, setErrorTitle] = useState('');
   const [errorStack, setErrorStack] = useState('');
+  const [deniedAction, setDeniedAction] = useState<string | null>(null);
 
   // Filter states
   const [tradeFilter, setTradeFilter] = useState('All');
@@ -235,8 +243,19 @@ export default function ContractorsTab() {
 
   const bookmarkedContractors = contractors.filter(c => bookmarkedIds.includes(c.id));
 
+  if (!canView) {
+    return <AccessDeniedOverlay moduleName="Contractors" actionName="View Directory" />;
+  }
+
   return (
-    <div className="p-4 space-y-6 max-w-7xl mx-auto w-full animate-fade-in text-left">
+    <div className="p-4 space-y-6 max-w-7xl mx-auto w-full animate-fade-in text-left relative">
+      {deniedAction && (
+        <AccessDeniedOverlay 
+          moduleName="Contractors" 
+          actionName={deniedAction} 
+          onClose={() => setDeniedAction(null)} 
+        />
+      )}
       
       {/* Error display */}
       {error && (
@@ -368,7 +387,13 @@ export default function ContractorsTab() {
                       </div>
                     </div>
                     <button 
-                      onClick={() => toggleBookmark(c.id)}
+                      onClick={() => {
+                        if (!canAddContractor) {
+                          setDeniedAction('Add Contractor');
+                        } else {
+                          toggleBookmark(c.id);
+                        }
+                      }}
                       className="text-coral-500 hover:text-paper-400 transition-all"
                       title="Remove Bookmark"
                     >
@@ -393,7 +418,13 @@ export default function ContractorsTab() {
                 </div>
 
                 <button 
-                  onClick={() => setSelectedContractorForJob(c)}
+                  onClick={() => {
+                    if (!canAssign) {
+                      setDeniedAction('Assign Contractor');
+                    } else {
+                      setSelectedContractorForJob(c);
+                    }
+                  }}
                   className="w-full py-1.5 rounded text-[10px] font-semibold bg-coral-500 text-white hover:bg-coral-600 shadow-sm transition-all"
                 >
                   Assign Work Order
@@ -541,14 +572,26 @@ export default function ContractorsTab() {
                         <td className="px-4 py-3 text-right">
                           <div className="flex items-center justify-end gap-1.5">
                             <button
-                              onClick={() => toggleBookmark(c.id)}
+                              onClick={() => {
+                                if (!canAddContractor) {
+                                  setDeniedAction('Add Contractor');
+                                } else {
+                                  toggleBookmark(c.id);
+                                }
+                              }}
                               className="p-1.5 rounded hover:bg-paper-100 dark:hover:bg-ink-700 text-paper-400 hover:text-coral-500 transition-all"
                               title={bookmarkedIds.includes(c.id) ? "Remove Bookmark" : "Bookmark Contractor"}
                             >
                               <Bookmark className={`w-3.5 h-3.5 ${bookmarkedIds.includes(c.id) ? 'fill-coral-500 text-coral-500' : ''}`} />
                             </button>
                             <button 
-                              onClick={() => setSelectedContractorForJob(c)}
+                              onClick={() => {
+                                if (!canAssign) {
+                                  setDeniedAction('Assign Contractor');
+                                } else {
+                                  setSelectedContractorForJob(c);
+                                }
+                              }}
                               className="px-2.5 py-1 rounded text-[10px] font-semibold bg-coral-500 text-white hover:bg-coral-600 shadow-sm shadow-coral-500/10 transition-all"
                             >
                               Assign Job

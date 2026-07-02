@@ -45,11 +45,12 @@ CREATE TABLE "user_notes" (
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-ALTER TABLE "agent_conversations" ALTER COLUMN "messages" SET DATA TYPE jsonb;--> statement-breakpoint
+ALTER TABLE "agent_conversations" ALTER COLUMN "messages" DROP DEFAULT;--> statement-breakpoint
+ALTER TABLE "agent_conversations" ALTER COLUMN "messages" SET DATA TYPE jsonb USING messages::jsonb;--> statement-breakpoint
 ALTER TABLE "agent_conversations" ALTER COLUMN "messages" SET DEFAULT '[]'::jsonb;--> statement-breakpoint
-ALTER TABLE "tickets" ALTER COLUMN "scheduled_at" SET DATA TYPE timestamp;--> statement-breakpoint
-ALTER TABLE "user" ALTER COLUMN "kin_details" SET DATA TYPE jsonb;--> statement-breakpoint
-ALTER TABLE "user" ALTER COLUMN "permissions" SET DATA TYPE jsonb;--> statement-breakpoint
+ALTER TABLE "tickets" ALTER COLUMN "scheduled_at" SET DATA TYPE timestamp USING scheduled_at::timestamp;--> statement-breakpoint
+ALTER TABLE "user" ALTER COLUMN "kin_details" SET DATA TYPE jsonb USING kin_details::jsonb;--> statement-breakpoint
+ALTER TABLE "user" ALTER COLUMN "permissions" SET DATA TYPE jsonb USING permissions::jsonb;--> statement-breakpoint
 ALTER TABLE "invoices" ADD COLUMN "amount_paid" numeric DEFAULT 0 NOT NULL;--> statement-breakpoint
 ALTER TABLE "agent_errors" ADD CONSTRAINT "agent_errors_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "contractor_bookmarks" ADD CONSTRAINT "contractor_bookmarks_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint

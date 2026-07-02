@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Body, Param, Req, UseGuards, InternalServerErrorException, BadRequestException, NotFoundException, Headers, UnauthorizedException, Inject } from '@nestjs/common';
-import { eq, and, inArray } from 'drizzle-orm';
+import { eq, and, inArray, or } from 'drizzle-orm';
 import * as schema from './db/schema';
 import { SessionGuard } from './auth/auth.guard';
 import { GcpTasksService } from './gcp-tasks.service';
@@ -21,7 +21,15 @@ export class CampaignsController {
     const ownerId = req.user.id;
     try {
       // Check if system templates exist
-      const existing = await db.select().from(schema.emailTemplates);
+      const existing = await db
+        .select()
+        .from(schema.emailTemplates)
+        .where(
+          or(
+            eq(schema.emailTemplates.isSystem, true),
+            eq(schema.emailTemplates.organizationName, req.user.organizationName || '')
+          )
+        );
       if (existing.length === 0) {
         // Seed default templates
         const defaults = [
@@ -122,6 +130,9 @@ export class CampaignsController {
         .limit(1);
 
       if (existing.length > 0) {
+        if (existing[0].organizationName && existing[0].organizationName !== req.user.organizationName) {
+          throw new BadRequestException('Access denied. You cannot edit this template.');
+        }
         await db
           .update(schema.emailTemplates)
           .set({
@@ -134,6 +145,7 @@ export class CampaignsController {
         await db.insert(schema.emailTemplates).values({
           id: templateId,
           ownerId,
+          organizationName: req.user.organizationName || null,
           name: body.name,
           subject: body.subject,
           body: body.body,
@@ -149,12 +161,17 @@ export class CampaignsController {
 
   @Post('email-templates/:id/delete')
   @UseGuards(SessionGuard)
-  async deleteTemplate(@Param('id') id: string) {
+  async deleteTemplate(@Req() req: any, @Param('id') id: string) {
     const db = this.db;
     try {
+      const existing = await db.select().from(schema.emailTemplates).where(eq(schema.emailTemplates.id, id)).limit(1);
+      if (existing.length > 0 && existing[0].organizationName && existing[0].organizationName !== req.user.organizationName) {
+        throw new BadRequestException('Access denied. You cannot delete this template.');
+      }
       await db.delete(schema.emailTemplates).where(eq(schema.emailTemplates.id, id));
       return { success: true };
     } catch (err: any) {
+      if (err instanceof BadRequestException) throw err;
       throw new InternalServerErrorException(`Failed to delete template: ${err.message}`);
     }
   }
@@ -163,12 +180,12 @@ export class CampaignsController {
   @UseGuards(SessionGuard)
   async getCampaigns(@Req() req: any) {
     const db = this.db;
-    const ownerId = req.user.id;
+    const callerOrg = req.user.organizationName || '';
     try {
       return await db
         .select()
         .from(schema.campaigns)
-        .where(eq(schema.campaigns.ownerId, ownerId));
+        .where(eq(schema.campaigns.organizationName, callerOrg));
     } catch (err: any) {
       throw new InternalServerErrorException(`Failed to retrieve campaigns: ${err.message}`);
     }
@@ -190,6 +207,7 @@ export class CampaignsController {
   ) {
     const db = this.db;
     const ownerId = req.user.id;
+    const callerOrg = req.user.organizationName || '';
 
     if (!body.title || !body.subject || !body.body || !body.audienceType) {
       throw new BadRequestException('Required fields missing.');
@@ -208,6 +226,7 @@ export class CampaignsController {
       await db.insert(schema.campaigns).values({
         id: campaignId,
         ownerId,
+        organizationName: callerOrg || null,
         title: body.title,
         subject: body.subject,
         body: body.body,
@@ -305,9 +324,11 @@ export class CampaignsController {
 
       let recipients: Array<{ email: string; name: string; propertyName?: string; amount?: string; date?: string }> = [];
 
+      const orgName = campaign.organizationName || '';
+
       if (campaign.audienceType === 'all') {
-        // Resolve all active tenants of this landlord
-        const props = await db.select().from(schema.properties).where(eq(schema.properties.ownerId, ownerId));
+        // Resolve all active tenants of this landlord's organization
+        const props = await db.select().from(schema.properties).where(eq(schema.properties.organizationName, orgName));
         const propIds = props.map((p: any) => p.id);
         if (propIds.length > 0) {
           const tenants = await db
@@ -363,22 +384,26 @@ export class CampaignsController {
           propertyName,
         }));
       } else if (campaign.audienceType === 'team') {
-        // Resolve team members
+        // Resolve team members within the same organization
         const relations = await db
           .select({
             email: schema.users.email,
             name: schema.users.name,
           })
-          .from(schema.managerRelations)
-          .innerJoin(schema.users, eq(schema.managerRelations.managerId, schema.users.id))
-          .where(eq(schema.managerRelations.ownerId, ownerId));
+          .from(schema.users)
+          .where(
+            and(
+              eq(schema.users.organizationName, orgName),
+              inArray(schema.users.role, ['landlord', 'manager'])
+            )
+          );
 
         recipients = relations.map((r: any) => ({
           email: r.email,
           name: r.name,
         }));
       } else if (campaign.audienceType === 'arrears') {
-        // Resolve active tenants with unpaid invoices
+        // Resolve active tenants with unpaid invoices in this organization
         const unpaid = await db
           .select({
             email: schema.invoices.tenantEmail,
@@ -389,7 +414,7 @@ export class CampaignsController {
           })
           .from(schema.invoices)
           .leftJoin(schema.properties, eq(schema.invoices.propertyId, schema.properties.id))
-          .where(and(eq(schema.invoices.ownerId, ownerId), eq(schema.invoices.status, 'unpaid')));
+          .where(and(eq(schema.invoices.organizationName, orgName), eq(schema.invoices.status, 'unpaid')));
 
         recipients = unpaid.map((u: any) => ({
           email: u.email,
@@ -425,7 +450,7 @@ export class CampaignsController {
         }
       } else if (campaign.audienceType === 'lease_expiring') {
         // Resolve active tenants with leaseEnd in next 60 days
-        const props = await db.select().from(schema.properties).where(eq(schema.properties.ownerId, ownerId));
+        const props = await db.select().from(schema.properties).where(eq(schema.properties.organizationName, orgName));
         const propIds = props.map((p: any) => p.id);
         if (propIds.length > 0) {
           const today = new Date();
@@ -510,17 +535,19 @@ export class CampaignsController {
   async getAutomations(@Req() req: any) {
     const db = this.db;
     const ownerId = req.user.id;
+    const callerOrg = req.user.organizationName || '';
     try {
       const existing = await db
         .select()
         .from(schema.automations)
-        .where(eq(schema.automations.ownerId, ownerId));
+        .where(eq(schema.automations.organizationName, callerOrg));
 
-      if (existing.length === 0) {
+      if (existing.length === 0 && callerOrg) {
         const defaults = [
           {
-            id: `rent-reminder-${ownerId}`,
+            id: `rent-reminder-${callerOrg}`,
             ownerId: ownerId,
+            organizationName: callerOrg,
             name: 'Rent Reminder',
             description: 'Notify tenants regarding their upcoming rent invoice before the due date.',
             triggerEvent: 'Invoice Due Date',
@@ -531,8 +558,9 @@ export class CampaignsController {
             channel: 'Email',
           },
           {
-            id: `late-rent-${ownerId}`,
+            id: `late-rent-${callerOrg}`,
             ownerId: ownerId,
+            organizationName: callerOrg,
             name: 'Late Rent Notice',
             description: 'Send alerts to tenants when an invoice status remains unpaid after the due date.',
             triggerEvent: 'Invoice Due Date',
@@ -543,8 +571,9 @@ export class CampaignsController {
             channel: 'Email',
           },
           {
-            id: `lease-expiry-${ownerId}`,
+            id: `lease-expiry-${callerOrg}`,
             ownerId: ownerId,
+            organizationName: callerOrg,
             name: 'Lease Renewal Prompt',
             description: 'Invite tenants to discuss renewal options when their lease contract is ending.',
             triggerEvent: 'Lease End Date',
@@ -555,8 +584,9 @@ export class CampaignsController {
             channel: 'Email',
           },
           {
-            id: `ticket-update-${ownerId}`,
+            id: `ticket-update-${callerOrg}`,
             ownerId: ownerId,
+            organizationName: callerOrg,
             name: 'Maintenance Progress Sync',
             description: 'Alert tenants and contractors as soon as a maintenance ticket status changes.',
             triggerEvent: 'Maintenance Ticket Update',
@@ -567,8 +597,9 @@ export class CampaignsController {
             channel: 'Both',
           },
           {
-            id: `welcome-${ownerId}`,
+            id: `welcome-${callerOrg}`,
             ownerId: ownerId,
+            organizationName: callerOrg,
             name: 'Move-In Welcome Sequence',
             description: 'Send onboarding guides, keys collection details, and portal links on their lease start date.',
             triggerEvent: 'Lease Start Date',
@@ -609,12 +640,12 @@ export class CampaignsController {
     },
   ) {
     const db = this.db;
-    const ownerId = req.user.id;
+    const callerOrg = req.user.organizationName || '';
     try {
       const existing = await db
         .select()
         .from(schema.automations)
-        .where(and(eq(schema.automations.id, id), eq(schema.automations.ownerId, ownerId)))
+        .where(and(eq(schema.automations.id, id), eq(schema.automations.organizationName, callerOrg)))
         .limit(1);
 
       if (existing.length === 0) {

@@ -69,10 +69,10 @@ export class RealtimeService {
                   : ''
               }
               <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 30px 0;" />
-              <p style="font-size: 10px; color: #64748b;">This is an automated notification from Landlord.nl. You received this because email notifications are enabled for important events.</p>
+              <p style="font-size: 10px; color: #64748b;">This is an automated notification from Dane Properties. You received this because email notifications are enabled for important events.</p>
             </div>
           `;
-          await this.emailService.sendEmail(user.email, `[Landlord.nl] ${title}`, emailHtml);
+          await this.emailService.sendEmail(user.email, `[Dane Properties] ${title}`, emailHtml);
         }
       }
     } catch (err) {

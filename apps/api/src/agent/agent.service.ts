@@ -103,6 +103,19 @@ export class AgentService {
 
     yield { type: 'status', payload: { status: 'thinking', message: `Sophia is routing your request to ${provider === 'gemini' ? 'Gemini Enterprise (Native Multimodal)' : 'DeepSeek'}...` } };
 
+    // Fetch the caller user profile to obtain organization name and custom permissions
+    let user: any = null;
+    let orgName = 'our organization';
+    try {
+      const userRec = await this.db.select().from(schema.users).where(eq(schema.users.id, userId)).limit(1);
+      if (userRec.length > 0) {
+        user = userRec[0];
+        orgName = user.organizationName || 'our organization';
+      }
+    } catch (e) {
+      this.logger.error('Failed to pre-fetch user profile for system prompt:', e);
+    }
+
     // Format system instruction
     let systemPrompt = `You are Sophia, the chief AI property administrator and coordinator for this system.
 Your personality is helpful, warm, polite, and female. You speak directly to the property manager/user as a professional colleague.
@@ -138,11 +151,36 @@ When a file is attached, you will be notified of its presence. Call 'parse_and_v
 
 If the user sends you a voice/audio message, listen to it directly. It will be provided to you as audio data. Respond to the spoken instructions directly.`;
 
+    if (userRole === 'manager' || userRole === 'landlord') {
+      let teammateInfoPrompt = `\n\n**YOU ARE TALKING TO A TEAM MEMBER:**
+- **Name:** ${user?.name || 'Team Member'}
+- **Email:** ${user?.email || 'N/A'}
+- **Organization Name:** ${orgName}
+- **Role:** ${user?.role || 'manager'}
+`;
+      if (user?.permissions) {
+        try {
+          const parsed = typeof user.permissions === 'string' ? JSON.parse(user.permissions) : user.permissions;
+          teammateInfoPrompt += `- **Permissions Configuration:** ${JSON.stringify(parsed)}\n`;
+        } catch (e) {}
+      } else {
+        teammateInfoPrompt += `- **Permissions Configuration:** Organization Owner (Full Access)\n`;
+      }
+      teammateInfoPrompt += `
+**SECURITY & ACCESS RULES:**
+If a tool execution fails with an error starting with "Access Denied", this is NOT a system hiccup, glitch, or bug. It means the user you are talking to does NOT have the required role-based permissions in ${orgName} to execute this action.
+When this happens:
+1. Immediately STOP attempting to retry the tool or adjust arguments.
+2. Inform the user directly and politely that they do not have the required permissions under their current workspace configuration in ${orgName} to perform this action.
+3. Suggest that they request permission from the organization owner or administrator under the Organization settings tab.
+`;
+      systemPrompt += teammateInfoPrompt;
+    }
+
     if (userRole === 'tenant') {
       let tenantInfoPrompt = '';
       try {
-        const userRec = await this.db.select().from(schema.users).where(eq(schema.users.id, userId)).limit(1);
-        const name = userRec[0]?.name || 'Resident';
+        const name = user?.name || 'Resident';
         
         const unitRecs = await this.db.select().from(schema.units).where(eq(schema.units.tenantId, userId)).limit(1);
         if (unitRecs.length > 0) {
@@ -280,23 +318,16 @@ If the user sends you a voice/audio message, listen to it directly and respond.$
 
         if (provider === 'gemini') {
           this.logger.warn(`Gemini (${currentGeminiModel}) failed: ${err.message}`);
-          if (currentGeminiModel === 'gemini-3.5-flash') {
-            currentGeminiModel = 'gemini-3.1-pro';
-            this.logger.warn(`Falling back to gemini-3.1-pro`);
-            yield { type: 'status', payload: { status: 'thinking', message: 'Re-routing through Gemini 3.1 Pro...' } };
-            continue;
-          } else if (currentGeminiModel === 'gemini-3.1-pro') {
-            provider = 'deepseek';
-            this.logger.warn(`Gemini completely failed. Falling back to DeepSeek.`);
-            yield { type: 'status', payload: { status: 'thinking', message: 'Gemini unavailable. Re-routing to DeepSeek...' } };
-            
-            // Push a critical instruction to the message history so DeepSeek knows Gemini failed
-            messages.push({
-              role: 'system',
-              content: 'CRITICAL SYSTEM NOTICE: The primary Gemini engine failed to run (likely due to missing credentials, service account setup, or environment limitations). You are running as the backup assistant. Please politely inform the user that because the primary Gemini engine is currently unavailable, you are unable to run tools, parse spreadsheet attachments, or modify properties/units in the database. Tell them what happened, apologize, and offer to help with general questions instead.'
-            });
-            continue;
-          }
+          provider = 'deepseek';
+          this.logger.warn(`Gemini completely failed. Falling back to DeepSeek.`);
+          yield { type: 'status', payload: { status: 'thinking', message: 'Gemini unavailable. Re-routing to DeepSeek...' } };
+          
+          // Push a critical instruction to the message history so DeepSeek knows Gemini failed
+          messages.push({
+            role: 'system',
+            content: 'CRITICAL SYSTEM NOTICE: The primary Gemini engine failed to run (likely due to missing credentials, service account setup, or environment limitations). You are running as the backup assistant. Please politely inform the user that because the primary Gemini engine is currently unavailable, you are unable to run tools, parse spreadsheet attachments, or modify properties/units in the database. Tell them what happened, apologize, and offer to help with general questions instead.'
+          });
+          continue;
         }
 
         this.logger.error(`Error in Sophia reasoning loop round ${round}`, err);
@@ -504,7 +535,10 @@ If the user sends you a voice/audio message, listen to it directly and respond.$
           throw new Error(`Tool ${toolName} is not registered in the system.`);
         }
  
-        const output = await registeredTool.execute(args, { db: this.db, userId, userRole });
+        const userRec = await this.db.select().from(schema.users).where(eq(schema.users.id, userId)).limit(1);
+        const user = userRec[0] || null;
+
+        const output = await registeredTool.execute(args, { db: this.db, userId, userRole, user });
 
         // Truncate output preview for messages list if extremely large
         let outputStr = JSON.stringify(output);

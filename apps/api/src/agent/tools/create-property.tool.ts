@@ -1,4 +1,6 @@
+import { eq } from 'drizzle-orm';
 import * as schema from '../../db/schema';
+import { checkToolPermission } from './permissions';
 
 export interface CreatePropertyArgs {
   name: string;
@@ -11,13 +13,19 @@ export interface CreatePropertyArgs {
 export class CreatePropertyTool {
   static async execute(
     args: CreatePropertyArgs,
-    context: { db: any; userId: string; userRole: string }
+    context: { db: any; userId: string; userRole: string; user?: any }
   ) {
     if (!context || !context.db) {
       return { success: false, error: 'Database context not available' };
     }
 
-    const { db, userId } = context;
+    const { db, userId, user } = context;
+
+    // Check permissions
+    if (user && !checkToolPermission(user, 'Properties', 'List New')) {
+      return { success: false, error: 'Access Denied: You do not have permission to list new properties.' };
+    }
+
     const name = args.name;
     const address = args.address || 'Address not specified';
     const unitsCount = args.unitsCount || 1;
@@ -28,12 +36,16 @@ export class CreatePropertyTool {
     }
 
     try {
+      const userExist = await db.select().from(schema.users).where(eq(schema.users.id, userId)).limit(1);
+      const orgName = userExist[0]?.organizationName || null;
+
       const propertyId = 'prop-' + Math.random().toString(36).substring(2, 9);
       await db.insert(schema.properties).values({
         id: propertyId,
         name,
         address,
         ownerId: userId,
+        organizationName: orgName,
         unitsCount,
         status: 'pending',
         photoUrl,
@@ -43,6 +55,7 @@ export class CreatePropertyTool {
       await db.insert(schema.auditLogs).values({
         id: 'audit-' + Math.random().toString(36).substring(2, 9),
         ownerId: userId,
+        organizationName: orgName,
         actorName: 'Sophia AI',
         actorEmail: 'sophia@landlord.nl',
         actorInitials: 'SA',

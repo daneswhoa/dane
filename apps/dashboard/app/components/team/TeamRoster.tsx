@@ -177,7 +177,7 @@ export default function TeamRoster() {
           </div>
           <h2 className="text-xl font-bold text-white tracking-tight">Managing Your Organization</h2>
           <p className="text-xs text-ink-300 leading-relaxed">
-            Learn how to structure roles, define custom property scopes, invite tenants, and automate notifications. Landlord.nl organizations support hierarchical access levels to delegate portfolio operations efficiently.
+            Learn how to structure roles, define custom property scopes, invite tenants, and automate notifications. Dane Properties organizations support hierarchical access levels to delegate portfolio operations efficiently.
           </p>
           <div className="flex flex-wrap gap-4 pt-2">
             <div className="flex items-center gap-1.5 text-xs text-ink-400">

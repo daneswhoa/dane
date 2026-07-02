@@ -10,6 +10,8 @@ import {
 import { EditPropertyModal } from '../../components/properties/EditPropertyModal';
 import { EditUnitModal } from '../../components/properties/EditUnitModal';
 import { MoveTenantModal } from '../../components/tenants/MoveTenantModal';
+import { usePermissionsStore } from '../../store/usePermissionsStore';
+import { AccessDeniedOverlay } from '../../components/team/AccessDeniedOverlay';
 
 interface Unit {
   id: string;
@@ -31,6 +33,11 @@ interface Property {
 }
 
 export default function PropertyDetailPage() {
+  const { checkPermission } = usePermissionsStore();
+  const canView = checkPermission('Properties', 'View Properties');
+  const canEdit = checkPermission('Properties', 'Edit');
+  const canManageLeases = checkPermission('Tenants', 'Manage Leases');
+
   const params = useParams();
   const router = useRouter();
   const propertyId = params.propertyId as string;
@@ -44,6 +51,7 @@ export default function PropertyDetailPage() {
   const [isEditPropOpen, setIsEditPropOpen] = useState(false);
   const [editingUnit, setEditingUnit] = useState<Unit | null>(null);
   const [movingTenant, setMovingTenant] = useState<{ id: string; name: string; unitLabel: string } | null>(null);
+  const [deniedAction, setDeniedAction] = useState<string | null>(null);
 
   async function loadProperty() {
     try {
@@ -105,8 +113,19 @@ export default function PropertyDetailPage() {
   const avgRent = activeUnits > 0 ? Math.round(totalRentRoll / activeUnits) : 0;
   const occupancyRate = activeUnits > 0 ? Math.round((occupiedCount / activeUnits) * 100) : 100;
 
+  if (!canView) {
+    return <AccessDeniedOverlay moduleName="Properties" actionName="View Properties" />;
+  }
+
   return (
-    <div className="min-h-screen bg-paper-50 dark:bg-ink-950 text-paper-900 dark:text-white p-4 md:p-8 space-y-6 transition-colors duration-200">
+    <div className="min-h-screen bg-paper-50 dark:bg-ink-950 text-paper-900 dark:text-white p-4 md:p-8 space-y-6 transition-colors duration-200 relative">
+      {deniedAction && (
+        <AccessDeniedOverlay 
+          moduleName="Properties" 
+          actionName={deniedAction} 
+          onClose={() => setDeniedAction(null)} 
+        />
+      )}
       
       {/* Top action bar */}
       <div className="max-w-6xl mx-auto flex items-center justify-between">
@@ -119,7 +138,13 @@ export default function PropertyDetailPage() {
 
         {property.status === 'pending' && (
           <button
-            onClick={() => router.push(`/properties/${property.id}/setup`)}
+            onClick={() => {
+              if (!canEdit) {
+                setDeniedAction('Edit');
+              } else {
+                router.push(`/properties/${property.id}/setup`);
+              }
+            }}
             className="px-3 py-1.5 text-xs font-semibold bg-amber-500 text-white rounded hover:bg-amber-600 transition-all shadow-sm"
           >
             Complete Setup Configuration
@@ -152,7 +177,13 @@ export default function PropertyDetailPage() {
                 {property.name}
               </h1>
               <button
-                onClick={() => setIsEditPropOpen(true)}
+                onClick={() => {
+                  if (!canEdit) {
+                    setDeniedAction('Edit');
+                  } else {
+                    setIsEditPropOpen(true);
+                  }
+                }}
                 className="p-1 rounded hover:bg-paper-100 dark:hover:bg-ink-800 text-paper-400 dark:text-ink-400 hover:text-coral-500 transition-colors"
                 title="Edit Property & Adjust Rent"
               >
@@ -272,14 +303,26 @@ export default function PropertyDetailPage() {
                 <div className="pt-2.5 border-t border-paper-150 dark:border-ink-800 flex items-center justify-end gap-2">
                   {unit.status === 'occupied' && unit.tenantId && (
                     <button
-                      onClick={() => setMovingTenant({ id: unit.tenantId!, name: unit.tenantName!, unitLabel: unit.label })}
+                      onClick={() => {
+                        if (!canManageLeases) {
+                          setDeniedAction('Manage Leases');
+                        } else {
+                          setMovingTenant({ id: unit.tenantId!, name: unit.tenantName!, unitLabel: unit.label });
+                        }
+                      }}
                       className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold border border-paper-200 dark:border-ink-800 text-paper-700 dark:text-ink-300 hover:bg-paper-50 dark:hover:bg-ink-800 rounded transition-all"
                     >
                       <ArrowRightLeft className="w-3.5 h-3.5 text-coral-500" /> Move Tenant
                     </button>
                   )}
                   <button
-                    onClick={() => setEditingUnit(unit)}
+                    onClick={() => {
+                      if (!canEdit) {
+                        setDeniedAction('Edit');
+                      } else {
+                        setEditingUnit(unit);
+                      }
+                    }}
                     className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold border border-paper-200 dark:border-ink-800 text-paper-700 dark:text-ink-300 hover:bg-paper-50 dark:hover:bg-ink-800 rounded transition-all"
                   >
                     <Pencil className="w-3.5 h-3.5 text-coral-500" /> Configure Unit

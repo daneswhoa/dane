@@ -6,14 +6,21 @@ import {
   Landmark, Building2, Building, Plus, MoreHorizontal, Filter,
   Download, Loader2, XCircle, Info, RefreshCw
 } from 'lucide-react';
+import { usePermissionsStore } from '../store/usePermissionsStore';
+import { AccessDeniedOverlay } from './team/AccessDeniedOverlay';
 
 export default function WalletTab() {
+  const { checkPermission } = usePermissionsStore();
+  const canView = checkPermission('Finance', 'View Ledgers');
+  const canProcess = checkPermission('Finance', 'Process Payments');
+
   const [profile, setProfile] = useState<any>(null);
   const [summary, setSummary] = useState<any>({ totalRevenue: 0, totalExpenses: 0, netOperatingIncome: 0, cashBalance: 0 });
   const [withdrawals, setWithdrawals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isWithdrawing, setIsWithdrawing] = useState(false);
   const [isConnectingStripe, setIsConnectingStripe] = useState(false);
+  const [deniedAction, setDeniedAction] = useState<string | null>(null);
 
   const fetchData = async () => {
     try {
@@ -98,8 +105,19 @@ export default function WalletTab() {
       setIsConnectingStripe(false);
     }
   };
+  if (!canView) {
+    return <AccessDeniedOverlay moduleName="Finance" actionName="View Ledgers" />;
+  }
+
   return (
-    <div className="p-6 max-w-6xl mx-auto w-full space-y-8 pb-20">
+    <div className="p-6 max-w-6xl mx-auto w-full space-y-8 pb-20 relative">
+      {deniedAction && (
+        <AccessDeniedOverlay 
+          moduleName="Finance" 
+          actionName={deniedAction} 
+          onClose={() => setDeniedAction(null)} 
+        />
+      )}
       <div>
         <h1 className="text-2xl font-bold text-paper-900 dark:text-white tracking-tight">Your Wallet</h1>
         <p className="text-paper-500 dark:text-ink-400 mt-1">Manage your cleared revenue, linked accounts, and withdrawal history.</p>
@@ -121,7 +139,13 @@ export default function WalletTab() {
           <div className="mt-6 flex items-center justify-between">
             <span className="text-[10px] text-paper-500 dark:text-ink-400 flex items-center gap-1"><ShieldCheck className="w-3 h-3" /> Fully Cleared</span>
             <button 
-              onClick={handleWithdraw}
+              onClick={() => {
+                if (!canProcess) {
+                  setDeniedAction('Process Payments');
+                } else {
+                  handleWithdraw();
+                }
+              }}
               disabled={isWithdrawing || summary.cashBalance <= 0 || !profile?.stripeAccountId}
               className="text-xs font-medium text-coral-600 dark:text-coral-400 hover:text-coral-700 disabled:opacity-50 transition-colors flex items-center gap-1"
             >
@@ -169,7 +193,13 @@ export default function WalletTab() {
                 <p className="text-xs text-paper-500 dark:text-ink-400 leading-relaxed">Connect securely via Stripe Express to enable withdrawals to your checking account.</p>
               </div>
               <button 
-                onClick={handleConnectStripe}
+                onClick={() => {
+                  if (!canProcess) {
+                    setDeniedAction('Process Payments');
+                  } else {
+                    handleConnectStripe();
+                  }
+                }}
                 disabled={isConnectingStripe}
                 className="w-full py-2 bg-[#635BFF] hover:bg-[#5851df] text-white text-xs font-bold rounded-lg transition-all shadow-lg flex items-center justify-center gap-2 disabled:opacity-70"
               >

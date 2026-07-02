@@ -26,6 +26,26 @@ const MANAGER_EXTRA_STEPS = [
   { icon: Users, label: 'Team' },
 ];
 
+function extractInviteCode(input: string): string {
+  if (!input) return '';
+  try {
+    if (input.includes('://') || input.includes('localhost') || input.includes('invite?')) {
+      const decoded = decodeURIComponent(input);
+      const url = new URL(decoded.startsWith('http') ? decoded : `http://${decoded}`);
+      const code = url.searchParams.get('code');
+      if (code) return code.toUpperCase().trim();
+      const match = decoded.match(/[?&]code=([a-zA-Z0-9-]+)/i);
+      if (match && match[1]) return match[1].toUpperCase().trim();
+    }
+  } catch (e) {}
+
+  const codeMatch = input.match(/(LNL-TEAM-[A-F0-9]+|LNL-TENANT-[A-F0-9]+|[A-F0-9]{8})/i);
+  if (codeMatch && codeMatch[0]) {
+    return codeMatch[0].toUpperCase().trim();
+  }
+  return input.toUpperCase().trim();
+}
+
 export default function RegisterWizard() {
   return (
     <Suspense fallback={
@@ -102,6 +122,37 @@ function RegisterWizardContent() {
     const root = document.documentElement;
     setIsDark(root.getAttribute('data-theme') === 'dark');
   }, []);
+
+  // Extract invite code from URL if present
+  useEffect(() => {
+    let codeFromUrl = '';
+    
+    // Check direct parameter first e.g. /register?code=LNL-TEAM-XXX
+    const directCode = searchParams.get('code');
+    if (directCode) {
+      codeFromUrl = directCode;
+    } else if (redirectUrl) {
+      // Check if redirect contains a code query param
+      try {
+        const parsedUrl = new URL(redirectUrl);
+        const codeParam = parsedUrl.searchParams.get('code');
+        if (codeParam) {
+          codeFromUrl = codeParam;
+        }
+      } catch (e) {
+        // Fallback for relative paths or invalid URLs
+        const match = redirectUrl.match(/[?&]code=([^&]+)/);
+        if (match && match[1]) {
+          codeFromUrl = match[1];
+        }
+      }
+    }
+
+    if (codeFromUrl) {
+      setInviteCode(extractInviteCode(codeFromUrl));
+      setWorkspaceMode('join');
+    }
+  }, [redirectUrl, searchParams]);
 
   useEffect(() => {
     if (isTransitioning || isProcessing) return;
@@ -215,7 +266,7 @@ function RegisterWizardContent() {
             }, 800);
           }, 1500);
         },
-        onError: (ctx) => {
+        onError: (ctx: any) => {
           setIsProcessing(false);
           setErrorModal({
             show: true,
@@ -276,6 +327,28 @@ function RegisterWizardContent() {
       }
 
       setIsLoading(false);
+
+      try {
+        const checkRes = await fetch(`${API_URL}/api/auth/check-invitation`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+        });
+        if (checkRes.ok) {
+          const checkData = await checkRes.json();
+          if (checkData.invited && checkData.code) {
+            const isTenant = checkData.targetRole === 'tenant';
+            const targetBaseUrl = isTenant 
+              ? (process.env.NEXT_PUBLIC_PORTAL_URL || 'http://localhost:3001')
+              : (process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000');
+            window.location.href = `${targetBaseUrl}/invite?code=${checkData.code}`;
+            return;
+          }
+        }
+      } catch (checkErr) {
+        console.error('Failed to check invitation:', checkErr);
+      }
+
       navigateStep(4);
     } catch (err: any) {
       setIsLoading(false);
@@ -302,33 +375,67 @@ function RegisterWizardContent() {
     } catch (err: any) { setIsLoading(false); setErrorMessage(err.message); }
   };
 
-  const handleCheckInvite = () => {
+  const handleCheckInvite = async () => {
     if (inviteCode.length < 4) return;
     setIsValidatingInvite(true);
-    setTimeout(() => {
-      setIsValidatingInvite(false);
-      setInvitePreview(true);
-      setInvitePreviewData({
-        orgName: 'Grandview Properties',
-        inviter: 'Jane Doe',
-        role: 'manager'
+    setFieldErrors({});
+    try {
+      const res = await fetch(`${API_URL}/api/dashboard/tenants/invites/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: inviteCode })
       });
-    }, 800);
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || 'Invalid or expired invitation code.');
+      }
+
+      // Check for email mismatch
+      const isEmailMismatch = email.toLowerCase() !== data.email.toLowerCase();
+      if (isEmailMismatch) {
+        setFieldErrors({
+          invitecode: `This invitation was sent to ${data.email}, but you are registered as ${email}. You can switch to "Create New" or sign out and join using ${data.email}.`
+        });
+        setInvitePreview(false);
+        setInvitePreviewData(null);
+      } else {
+        setInvitePreview(true);
+        setInvitePreviewData({
+          orgName: data.propertyName,
+          inviter: data.managerName,
+          role: data.targetRole
+        });
+      }
+    } catch (err: any) {
+      setFieldErrors({ invitecode: err.message || 'Verification failed.' });
+      setInvitePreview(false);
+      setInvitePreviewData(null);
+    } finally {
+      setIsValidatingInvite(false);
+    }
   };
 
   const handleContinueFromStep5 = async () => {
     if (workspaceMode === 'create' && !orgName.trim()) { setFieldErrors({ orgname: 'Give your workspace a name to continue.' }); return; }
+    if (workspaceMode === 'join') {
+      if (!inviteCode || !invitePreviewData) {
+        setFieldErrors({ invitecode: 'Verify your invite code first.' });
+        return;
+      }
+      // Redirect to the accept invite page!
+      window.location.href = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/invite?code=${inviteCode}`;
+      return;
+    }
+
     setFieldErrors({}); setIsLoading(true); setErrorMessage('');
     try {
-      const actualOrg = workspaceMode === 'create' ? orgName : 'Grandview Properties';
       const res = await fetch(`${API_URL}/api/auth/update-onboarding`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, role: 'manager', organizationName: actualOrg })
+        body: JSON.stringify({ email, role: 'manager', organizationName: orgName })
       });
       if (!res.ok) throw new Error('Failed to save workspace setup.');
       setIsLoading(false);
-      if (workspaceMode === 'create') navigateStep(6);
-      else triggerFinalRedirection('manager');
+      navigateStep(6);
     } catch (err: any) { setIsLoading(false); setErrorMessage(err.message); }
   };
 
@@ -511,7 +618,7 @@ function RegisterWizardContent() {
                 orgName={orgName} setOrgName={setOrgName}
                 orgSlug={orgSlug} setOrgSlug={setOrgSlug}
                 uploadedLogoUrl={uploadedLogoUrl} setUploadedLogoUrl={setUploadedLogoUrl}
-                inviteCode={inviteCode} setInviteCode={setInviteCode}
+                inviteCode={inviteCode} setInviteCode={(val) => setInviteCode(extractInviteCode(val))}
                 invitePreview={invitePreview} invitePreviewData={invitePreviewData}
                 handleCheckInvite={handleCheckInvite} isValidatingInvite={isValidatingInvite}
                 onBack={() => navigateStep(4)} onContinue={handleContinueFromStep5}

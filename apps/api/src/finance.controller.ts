@@ -77,19 +77,20 @@ export class FinanceController {
           .where(eq(schema.invoices.tenantId, callerId))
           .orderBy(desc(schema.invoices.createdAt));
       } else {
-        // Managers see invoices for their owned properties
+        // Managers see invoices for their organization's properties
+        const callerOrg = req.user.organizationName || '';
         if (tenantId) {
           list = await baseQuery
             .where(
               and(
                 eq(schema.invoices.tenantId, tenantId),
-                eq(schema.properties.ownerId, callerId)
+                eq(schema.properties.organizationName, callerOrg)
               )
             )
             .orderBy(desc(schema.invoices.createdAt));
         } else {
           list = await baseQuery
-            .where(eq(schema.properties.ownerId, callerId))
+            .where(eq(schema.properties.organizationName, callerOrg))
             .orderBy(desc(schema.invoices.createdAt));
         }
       }
@@ -116,10 +117,17 @@ export class FinanceController {
   @Get('billing-properties')
   async getProperties(@Req() req: any) {
     const db = this.db;
-    const callerId = req.user.id;
+    const callerOrg = req.user.organizationName || '';
     try {
-      const props = await db.select().from(schema.properties).where(eq(schema.properties.ownerId, callerId));
-      const units = await db.select().from(schema.units);
+      let props: any[] = [];
+      if (callerOrg) {
+        props = await db.select().from(schema.properties).where(eq(schema.properties.organizationName, callerOrg));
+      }
+      const propIds = props.map((p: any) => p.id);
+      let units: any[] = [];
+      if (propIds.length > 0) {
+        units = await db.select().from(schema.units).where(inArray(schema.units.propertyId, propIds));
+      }
       
       const result = props.map((p: any) => {
         const propUnits = units.filter((u: any) => u.propertyId === p.id);
@@ -178,6 +186,7 @@ export class FinanceController {
         unitId: payload.unitId || null,
         propertyId: payload.propertyId,
         ownerId: callerId,
+        organizationName: req.user.organizationName || null,
         amount: Number(payload.amount),
         description: payload.description || `Custom ${payload.type || 'Fee'} Invoice`,
         status: 'PENDING',
@@ -368,7 +377,7 @@ export class FinanceController {
         .where(
           and(
             inArray(schema.invoices.status, ['PAID', 'paid']),
-            eq(schema.invoices.ownerId, callerId)
+            eq(schema.invoices.organizationName, req.user.organizationName || '')
           )
         );
 
@@ -381,7 +390,7 @@ export class FinanceController {
         .where(
           and(
             inArray(schema.tickets.status, ['completed', 'COMPLETED']),
-            eq(schema.tickets.ownerId, callerId)
+            eq(schema.tickets.organizationName, req.user.organizationName || '')
           )
         );
 
@@ -426,7 +435,7 @@ export class FinanceController {
         .where(
           and(
             inArray(schema.invoices.status, ['PAID', 'paid']),
-            eq(schema.invoices.ownerId, callerId)
+            eq(schema.invoices.organizationName, req.user.organizationName || '')
           )
         );
  
@@ -447,7 +456,7 @@ export class FinanceController {
         .where(
           and(
             inArray(schema.tickets.status, ['completed', 'COMPLETED']),
-            eq(schema.tickets.ownerId, callerId)
+            eq(schema.tickets.organizationName, req.user.organizationName || '')
           )
         );
 
@@ -570,19 +579,28 @@ export class FinanceController {
     
     // Role / Permission Check
     const hasPermission = (permissionKey: string) => {
-      if (req.user.role === 'manager') return true;
+      if ((req.user.role === 'manager' || req.user.role === 'landlord') && !req.user.permissions) return true;
       const permissionsRaw = req.user.permissions;
       if (!permissionsRaw) return false;
       try {
-        const parsed = JSON.parse(permissionsRaw);
+        const parsed = typeof permissionsRaw === 'string' ? JSON.parse(permissionsRaw) : permissionsRaw;
         if (typeof parsed === 'object' && parsed !== null) {
-          return !!parsed[permissionKey] || !!parsed.all;
+          if (['reconcile', 'cancel', 'reconcile_invoices', 'cancel_invoices', 'delete_invoices'].includes(permissionKey)) {
+            const finance = parsed['Finance'];
+            if (finance) {
+              if (finance.access === 'full') return true;
+              if (finance.access === 'custom' && Array.isArray(finance.actions)) {
+                return finance.actions.includes('Process Payments');
+              }
+            }
+          }
+          if (parsed[permissionKey]) return true;
         }
       } catch (e) {}
-      return permissionsRaw.includes(permissionKey) || permissionsRaw.includes('all');
+      return false;
     };
 
-    if (!hasPermission('reconcile') && !hasPermission('reconcile_invoices')) {
+    if (!hasPermission('reconcile')) {
       throw new BadRequestException('Access denied. You do not have permission to reconcile invoices.');
     }
 
@@ -632,19 +650,28 @@ export class FinanceController {
     
     // Role / Permission Check
     const hasPermission = (permissionKey: string) => {
-      if (req.user.role === 'manager') return true;
+      if ((req.user.role === 'manager' || req.user.role === 'landlord') && !req.user.permissions) return true;
       const permissionsRaw = req.user.permissions;
       if (!permissionsRaw) return false;
       try {
-        const parsed = JSON.parse(permissionsRaw);
+        const parsed = typeof permissionsRaw === 'string' ? JSON.parse(permissionsRaw) : permissionsRaw;
         if (typeof parsed === 'object' && parsed !== null) {
-          return !!parsed[permissionKey] || !!parsed.all;
+          if (['reconcile', 'cancel', 'reconcile_invoices', 'cancel_invoices', 'delete_invoices'].includes(permissionKey)) {
+            const finance = parsed['Finance'];
+            if (finance) {
+              if (finance.access === 'full') return true;
+              if (finance.access === 'custom' && Array.isArray(finance.actions)) {
+                return finance.actions.includes('Process Payments');
+              }
+            }
+          }
+          if (parsed[permissionKey]) return true;
         }
       } catch (e) {}
-      return permissionsRaw.includes(permissionKey) || permissionsRaw.includes('all');
+      return false;
     };
 
-    if (!hasPermission('cancel') && !hasPermission('cancel_invoices') && !hasPermission('delete_invoices')) {
+    if (!hasPermission('cancel')) {
       throw new BadRequestException('Access denied. You do not have permission to cancel invoices.');
     }
 
@@ -710,7 +737,7 @@ export class FinanceController {
       if (callerRole === 'tenant' && inv.tenantId !== callerId) {
         throw new BadRequestException('Access denied. You cannot pay other users\' invoices.');
       }
-      if (callerRole === 'manager' && prop?.ownerId !== callerId) {
+      if ((callerRole === 'manager' || callerRole === 'landlord') && prop?.organizationName !== req.user.organizationName) {
         throw new BadRequestException('Access denied. You cannot pay invoices of other portfolios.');
       }
 
@@ -958,7 +985,7 @@ export class FinanceController {
       if (callerRole === 'tenant' && invoice.tenantId !== callerId) {
         throw new BadRequestException('Access denied. You cannot generate a payment intent for another user\'s invoice.');
       }
-      if (callerRole === 'manager' && prop?.ownerId !== callerId) {
+      if ((callerRole === 'manager' || callerRole === 'landlord') && prop?.organizationName !== req.user.organizationName) {
         throw new BadRequestException('Access denied. You cannot generate a payment intent for an invoice outside your portfolio.');
       }
 
@@ -1044,7 +1071,7 @@ export class FinanceController {
       if (callerRole === 'tenant' && invoice.tenantId !== callerId) {
         throw new BadRequestException('Access denied. You cannot confirm payment for another user\'s invoice.');
       }
-      if (callerRole === 'manager' && prop?.ownerId !== callerId) {
+      if ((callerRole === 'manager' || callerRole === 'landlord') && prop?.organizationName !== req.user.organizationName) {
         throw new BadRequestException('Access denied. You cannot confirm payment for an invoice outside your portfolio.');
       }
 
@@ -1112,7 +1139,7 @@ export class FinanceController {
         const emailHtml = `
           <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 25px; color: #1e293b; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
             <div style="text-align: center; border-bottom: 2px solid #f1f5f9; padding-bottom: 20px; margin-bottom: 20px;">
-              <h1 style="color: #f43f5e; margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.5px;">landlord.nl</h1>
+              <h1 style="color: #f43f5e; margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.5px;">Dane Properties</h1>
               <p style="margin: 5px 0 0 0; font-size: 12px; color: #64748b; font-weight: 500;">Payment Confirmed</p>
             </div>
             <p style="font-size: 15px; font-weight: 600; color: #0f172a;">Dear ${invoice.tenantName},</p>
@@ -1131,12 +1158,12 @@ export class FinanceController {
             </div>
 
             <p style="font-size: 13px; color: #64748b; line-height: 1.6; margin-bottom: 24px;">
-              Your account has been credited. You can log in to your Landlord.nl portal to view and download the full PDF receipt at any time.
+              Your account has been credited. You can log in to your Dane Properties portal to view and download the full PDF receipt at any time.
             </p>
             
             <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
             <p style="font-size: 10px; color: #94a3b8; text-align: center; margin: 0; line-height: 1.4;">
-              This is a secure automated receipt from Landlord.nl. If you did not make this transaction or have billing questions, please reach out to your property manager.
+              This is a secure automated receipt from Dane Properties. If you did not make this transaction or have billing questions, please reach out to your property manager.
             </p>
           </div>
         `;
@@ -1144,7 +1171,7 @@ export class FinanceController {
         try {
           await this.emailService.sendEmail(
             invoice.tenantEmail,
-            `[Landlord.nl] Payment Receipt - #${invoice.invoiceNumber || invoice.id}`,
+            `[Dane Properties] Payment Receipt - #${invoice.invoiceNumber || invoice.id}`,
             emailHtml
           );
         } catch (emailErr) {
@@ -1181,9 +1208,10 @@ export class FinanceController {
   async getSidebarMetrics(@Req() req: any) {
     const db = this.db;
     const callerId = req.user.id;
+    const callerOrg = req.user.organizationName || '';
     try {
       // 1. Properties
-      const props = await db.select().from(schema.properties).where(eq(schema.properties.ownerId, callerId));
+      const props = await db.select().from(schema.properties).where(eq(schema.properties.organizationName, callerOrg));
       const totalProperties = props.length;
       const hasPendingProperties = props.some((p: any) => p.status === 'pending');
 
@@ -1192,11 +1220,11 @@ export class FinanceController {
         .select({ count: sql<number>`count(distinct ${schema.units.tenantId})` })
         .from(schema.units)
         .innerJoin(schema.properties, eq(schema.units.propertyId, schema.properties.id))
-        .where(eq(schema.properties.ownerId, callerId));
+        .where(eq(schema.properties.organizationName, callerOrg));
       const totalTenants = Number(tenantCountRes[0]?.count || 0);
 
       // 3. Invoices
-      const invs = await db.select().from(schema.invoices).where(eq(schema.invoices.ownerId, callerId));
+      const invs = await db.select().from(schema.invoices).where(eq(schema.invoices.organizationName, callerOrg));
       const totalInvoices = invs.length;
       const hasOverdueInvoices = invs.some((i: any) => {
         const isUnpaid = i.status && i.status.toLowerCase() === 'unpaid';
@@ -1206,7 +1234,7 @@ export class FinanceController {
       });
 
       // 4. Maintenance
-      const tkts = await db.select().from(schema.tickets).where(eq(schema.tickets.ownerId, callerId));
+      const tkts = await db.select().from(schema.tickets).where(eq(schema.tickets.organizationName, callerOrg));
       // "total maintenance request that arent completed": status is not 'completed' AND status is not 'paid'
       const uncompletedTickets = tkts.filter((t: any) => t.status !== 'completed' && t.status !== 'paid').length;
       // "a yellow dot if any non reviewed": status is 'open'

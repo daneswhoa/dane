@@ -2,10 +2,21 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { Send, Bot, User, Loader2, Sparkles, Plus, Trash2, MessageSquare, Square, Menu, X } from 'lucide-react';
+import { Send, Bot, User, Loader2, Sparkles, Plus, Trash2, MessageSquare, Square, Menu, X, Wrench, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { FormattedMessage } from '../components/SophiaMessageFormatter';
 
 const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+
+interface ContentBlock {
+  type: 'text' | 'action' | 'widget';
+  text?: string;
+  actionId?: string;
+  actionName?: string;
+  actionStatus?: 'pending' | 'completed' | 'failed';
+  actionDetails?: string;
+  actionTimestamp?: string;
+  widgetData?: any;
+}
 
 interface Message {
   id: string;
@@ -13,6 +24,9 @@ interface Message {
   text: string;
   timestamp: string;
   isDrafting?: boolean;
+  successCount?: number;
+  failureCount?: number;
+  blocks?: ContentBlock[];
 }
 
 export default function TenantSophiaPage() {
@@ -143,8 +157,26 @@ export default function TenantSophiaPage() {
       setMessages((prev) => {
         const last = prev[prev.length - 1];
         if (last && last.sender === 'sophia' && last.isDrafting) {
+          const currentBlocks = last.blocks ? [...last.blocks] : [];
+          if (currentBlocks.length === 0 && last.text) {
+            currentBlocks.push({ type: 'text', text: last.text });
+          }
+          const lastBlock = currentBlocks[currentBlocks.length - 1];
+          if (lastBlock && lastBlock.type === 'text') {
+            currentBlocks[currentBlocks.length - 1] = {
+              ...lastBlock,
+              text: (lastBlock.text || '') + data.text
+            };
+          } else {
+            currentBlocks.push({ type: 'text', text: data.text });
+          }
+
           const updated = [...prev];
-          updated[updated.length - 1].text += data.text;
+          updated[updated.length - 1] = {
+            ...last,
+            text: last.text + data.text,
+            blocks: currentBlocks
+          };
           return updated;
         } else {
           return [
@@ -155,6 +187,7 @@ export default function TenantSophiaPage() {
               text: data.text,
               timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
               isDrafting: true,
+              blocks: [{ type: 'text', text: data.text }]
             }
           ];
         }
@@ -174,6 +207,83 @@ export default function TenantSophiaPage() {
         });
         loadThreadsList(); // Reload thread list to get up-to-date titles/previews
       }
+    });
+
+    s.on('sophia-action-start', (data: { id: string; name: string; details?: string; timestamp: string }) => {
+      setMessages(prev => {
+        if (prev.length === 0) return prev;
+        const lastMsg = prev[prev.length - 1];
+        if (lastMsg && lastMsg.sender === 'sophia') {
+          const currentBlocks = lastMsg.blocks ? [...lastMsg.blocks] : [];
+          if (currentBlocks.length === 0 && lastMsg.text) {
+            currentBlocks.push({ type: 'text', text: lastMsg.text });
+          }
+
+          if (!currentBlocks.some(b => b.type === 'action' && b.actionId === data.id)) {
+            currentBlocks.push({
+              type: 'action',
+              actionId: data.id,
+              actionName: data.name,
+              actionStatus: 'pending' as const,
+              actionDetails: data.details,
+              actionTimestamp: data.timestamp
+            });
+          }
+
+          return [
+            ...prev.slice(0, -1),
+            {
+              ...lastMsg,
+              blocks: currentBlocks
+            }
+          ];
+        }
+        return prev;
+      });
+    });
+
+    s.on('sophia-action-end', (data: { id: string; status: 'completed' | 'failed' }) => {
+      setMessages(prev =>
+        prev.map(msg => {
+          if (msg.sender === 'sophia') {
+            const hasActionInBlocks = msg.blocks?.some(b => b.type === 'action' && b.actionId === data.id);
+            if (hasActionInBlocks) {
+              const updatedBlocks = msg.blocks?.map(block => {
+                if (block.type === 'action' && block.actionId === data.id) {
+                  return {
+                    ...block,
+                    actionStatus: data.status
+                  };
+                }
+                return block;
+              }) || [];
+
+              return {
+                ...msg,
+                blocks: updatedBlocks
+              };
+            }
+          }
+          return msg;
+        })
+      );
+    });
+
+    s.on('sophia-token-metrics', (data: { successCount: number; failureCount: number }) => {
+      setMessages(prev => {
+        const lastMsg = prev[prev.length - 1];
+        if (lastMsg && lastMsg.sender === 'sophia') {
+          return [
+            ...prev.slice(0, -1),
+            {
+              ...lastMsg,
+              successCount: data.successCount,
+              failureCount: data.failureCount
+            }
+          ];
+        }
+        return prev;
+      });
     });
 
     s.on('sophia-token-reset', () => {
@@ -215,6 +325,9 @@ export default function TenantSophiaPage() {
       s.off('sophia-token');
       s.off('sophia-token-reset');
       s.off('sophia-status');
+      s.off('sophia-action-start');
+      s.off('sophia-action-end');
+      s.off('sophia-token-metrics');
       s.off('sophia-error');
       s.disconnect();
     };
@@ -366,7 +479,64 @@ export default function TenantSophiaPage() {
                     </div>
                     <div className={`px-4 py-3 rounded-2xl shadow-sm ${isSophia ? 'bg-white dark:bg-ink-800 text-paper-800 dark:text-ink-100 border border-paper-200 dark:border-ink-700 rounded-tl-sm' : 'bg-coral-500 text-white rounded-tr-sm'}`}>
                       {isSophia ? (
-                        <FormattedMessage text={msg.text} />
+                        <div className="space-y-3">
+                          {/* Tool Execution Badge */}
+                          {msg.blocks && msg.blocks.some(b => b.type === 'action') && (
+                            (() => {
+                              const actionBlocks = msg.blocks.filter(b => b.type === 'action');
+                              const isAnyFailed = actionBlocks.some(b => b.actionStatus === 'failed');
+                              const isAnyPending = actionBlocks.some(b => b.actionStatus === 'pending');
+                              const isAllCompleted = actionBlocks.every(b => b.actionStatus === 'completed');
+
+                              let badgeColorClass = 'text-amber-600 dark:text-amber-450 bg-amber-500/5 border-amber-500/10';
+                              let statusIcon = <Wrench className="w-3 h-3 animate-pulse" />;
+                              let statusText = isAnyPending
+                                ? (actionBlocks.length > 1 ? `Checking with tools (${actionBlocks.length})...` : 'Checking with tool...')
+                                : (actionBlocks.length > 1 ? `Tools used (${actionBlocks.length})` : 'Tool used');
+
+                              if (isAnyFailed) {
+                                badgeColorClass = 'text-red-500 bg-red-500/5 border-red-500/15';
+                                statusIcon = <AlertTriangle className="w-3 h-3 text-red-500 animate-bounce" />;
+                                statusText = `Tool call failed!`;
+                              } else if (isAllCompleted) {
+                                badgeColorClass = 'text-emerald-600 dark:text-emerald-450 bg-emerald-500/5 border-emerald-500/10';
+                                statusIcon = <CheckCircle2 className="w-3 h-3 text-emerald-500" />;
+                              }
+
+                              return (
+                                <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[9px] font-bold font-mono tracking-wider shadow-sm uppercase ${badgeColorClass}`}>
+                                  {statusIcon}
+                                  <span>{statusText}</span>
+                                </div>
+                              );
+                            })()
+                          )}
+
+                          {msg.blocks && msg.blocks.length > 0 ? (
+                            msg.blocks.map((block, bIdx) => {
+                              if (block.type === 'text') {
+                                return <FormattedMessage key={bIdx} text={block.text || ''} />;
+                              }
+                              if (block.type === 'action' && block.actionStatus === 'failed') {
+                                return (
+                                  <div key={bIdx} className="p-3 bg-red-500/5 border border-red-500/15 rounded-xl text-xs text-red-650 dark:text-red-400 font-medium flex items-start gap-2 shadow-sm animate-fade-in">
+                                    <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                                    <div>
+                                      <div className="font-bold uppercase tracking-wider text-[9px] text-red-500 font-mono mb-0.5">Tool execution failed</div>
+                                      <span className="font-mono bg-red-500/10 px-1 py-0.5 rounded text-[10px]">{block.actionName}</span>
+                                      {block.actionDetails && (
+                                        <p className="mt-1.5 opacity-90 text-[11px] font-sans leading-relaxed">{block.actionDetails}</p>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              }
+                              return null;
+                            })
+                          ) : (
+                            <FormattedMessage text={msg.text} />
+                          )}
+                        </div>
                       ) : (
                         <span className="whitespace-pre-wrap">{msg.text}</span>
                       )}

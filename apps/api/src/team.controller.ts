@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Req, UnauthorizedException, BadRequestException, InternalServerErrorException, UseGuards, Inject } from '@nestjs/common';
+import { Controller, Get, Post, Put, Param, Body, Req, UnauthorizedException, BadRequestException, NotFoundException, InternalServerErrorException, UseGuards, Inject } from '@nestjs/common';
 import * as schema from './db/schema';
 import { eq, and, inArray } from 'drizzle-orm';
 import { randomBytes } from 'crypto';
@@ -17,28 +17,50 @@ export class TeamController {
   @Get()
   async getTeamRoster(@Req() req: any) {
     const db = this.db;
-    const ownerId = req.user?.id || 'current-user-id'; // using mock fallback if not logged in
+    const ownerId = req.user?.id || 'current-user-id';
+    const callerOrg = req.user?.organizationName || '';
     
     try {
-      // Get actual users who are managers/owners (simplified)
-      // Since we don't have a formal organization table yet, we find users who share this owner's org name or are tied to them.
-      const teamUsers = await db.select().from(schema.users).where(
-        eq(schema.users.role, 'landlord') // Simplified for demo
-      );
+      let teamUsers: any[] = [];
+      if (callerOrg) {
+        teamUsers = await db.select().from(schema.users).where(
+          eq(schema.users.organizationName, callerOrg)
+        );
+      }
 
       // Get pending invites
-      const pendingInvites = await db.select().from(schema.invitations).where(
-        and(eq(schema.invitations.ownerId, ownerId), eq(schema.invitations.used, false))
-      );
+      let pendingInvites: any[] = [];
+      if (callerOrg) {
+        pendingInvites = await db.select().from(schema.invitations).where(
+          and(eq(schema.invitations.organizationName, callerOrg), eq(schema.invitations.used, false))
+        );
+      } else {
+        pendingInvites = await db.select().from(schema.invitations).where(
+          and(eq(schema.invitations.ownerId, ownerId), eq(schema.invitations.used, false))
+        );
+      }
 
       return {
-        members: teamUsers.map((u: any) => ({
-          id: u.id,
-          name: u.name,
-          email: u.email,
-          role: u.role,
-          initials: u.name.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase()
-        })),
+        members: teamUsers.map((u: any) => {
+          let roleTitle = u.role;
+          if (u.permissions) {
+            try {
+              const parsed = typeof u.permissions === 'string' ? JSON.parse(u.permissions) : u.permissions;
+              if (parsed && parsed.roleTitle) {
+                roleTitle = parsed.roleTitle;
+              }
+            } catch (e) {}
+          }
+          return {
+            id: u.id,
+            name: u.name,
+            email: u.email,
+            role: roleTitle,
+            allowedProperties: u.allowedProperties,
+            permissions: u.permissions,
+            initials: u.name ? u.name.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase() : 'JD'
+          };
+        }),
         invites: pendingInvites.map((i: any) => ({
           id: i.id,
           email: i.email,
@@ -50,7 +72,7 @@ export class TeamController {
       throw new InternalServerErrorException(err.message);
     }
   }
-
+  
   @Post('invites')
   async createTeamInvite(@Req() req: any, @Body() body: { email: string, role: string, allowedProperties: string[] | string, permissions: any }) {
     const db = this.db;
@@ -71,11 +93,19 @@ export class TeamController {
         : Array.isArray(body.allowedProperties) 
           ? body.allowedProperties.join(',') 
           : '';
-      const permissionsStr = body.permissions ? JSON.stringify(body.permissions) : '';
+
+      const permissionsObj = body.permissions || {};
+      permissionsObj.roleTitle = body.role; // Embed selected role title inside the permissions object
+      const permissionsStr = JSON.stringify(permissionsObj);
+
+      // Get owner details to find organization Name
+      const owner = await db.select().from(schema.users).where(eq(schema.users.id, ownerId)).limit(1);
+      const orgName = owner[0]?.organizationName || 'Dane Properties';
 
       await db.insert(schema.invitations).values({
         id: inviteCode,
         ownerId,
+        organizationName: orgName,
         email: body.email,
         targetRole: body.role,
         allowedProperties: allowedPropertiesStr,
@@ -83,10 +113,6 @@ export class TeamController {
         used: false,
         expiresAt: expireDate,
       });
-
-      // Get owner details to find organization Name
-      const owner = await db.select().from(schema.users).where(eq(schema.users.id, ownerId)).limit(1);
-      const orgName = owner[0]?.organizationName || 'Landlord.nl';
 
       // Construct invite link
       const inviteLink = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/invite?code=${inviteCode}`;
@@ -126,13 +152,16 @@ export class TeamController {
   @Get('org-stats')
   async getOrgStats(@Req() req: any) {
     const db = this.db;
-    const ownerId = req.user.id;
+    const callerOrg = req.user.organizationName || '';
 
     try {
-      const props = await db
-        .select()
-        .from(schema.properties)
-        .where(eq(schema.properties.ownerId, ownerId));
+      let props: any[] = [];
+      if (callerOrg) {
+        props = await db
+          .select()
+          .from(schema.properties)
+          .where(eq(schema.properties.organizationName, callerOrg));
+      }
 
       const propIds = props.map((p: any) => p.id);
 
@@ -281,24 +310,32 @@ export class TeamController {
           throw new BadRequestException('Invite code has already been used.');
         }
 
+        if (req.user.email.toLowerCase() !== invite.email.toLowerCase()) {
+          throw new BadRequestException('This invite code was issued to a different email address.');
+        }
+
         if (invite.expiresAt < new Date()) {
           throw new BadRequestException('Invite code has expired.');
         }
 
-        // Get owner details to find organization Name
-        const owner = await tx.select().from(schema.users).where(eq(schema.users.id, invite.ownerId)).limit(1);
-        const orgName = owner[0]?.organizationName || 'Landlord.nl';
+        const orgName = invite.organizationName || 'Dane Properties';
 
         // Update user's role and organizationName in database
         await tx
           .update(schema.users)
           .set({
-            role: 'landlord', // Team members share the landlord role or we can set it based on targetRole
+            role: 'manager', // Always set to manager role at platform level
             organizationName: orgName,
             allowedProperties: invite.allowedProperties,
             permissions: invite.permissions,
           })
           .where(eq(schema.users.id, callerId));
+
+        // Create manager relations mapping
+        await tx.insert(schema.managerRelations).values({
+          managerId: callerId,
+          ownerId: invite.ownerId,
+        });
 
         // Mark invite as used
         await tx
@@ -311,6 +348,90 @@ export class TeamController {
     } catch (err: any) {
       if (err instanceof BadRequestException) throw err;
       throw new InternalServerErrorException(`Failed to accept team invite: ${err.message}`);
+    }
+  }
+
+  @Put('members/:id/access')
+  async updateMemberAccess(
+    @Req() req: any,
+    @Param('id') memberId: string,
+    @Body() body: {
+      role: string;
+      allowedProperties: string | string[];
+      permissions: any;
+    }
+  ) {
+    const db = this.db;
+    const callerId = req.user.id;
+    const callerRole = req.user.role;
+    const callerOrg = req.user.organizationName;
+
+    if (callerRole !== 'landlord' && callerRole !== 'manager') {
+      throw new BadRequestException('Access denied. Only organization leaders can modify member permissions.');
+    }
+
+    if (!callerOrg) {
+      throw new BadRequestException('Caller organization is not configured.');
+    }
+
+    try {
+      // Find the member and ensure they belong to the same organization
+      const members = await db
+        .select()
+        .from(schema.users)
+        .where(and(eq(schema.users.id, memberId), eq(schema.users.organizationName, callerOrg)))
+        .limit(1);
+
+      if (members.length === 0) {
+        throw new NotFoundException('Member not found in this organization.');
+      }
+
+      const member = members[0];
+
+      if (member.id === callerId) {
+        throw new BadRequestException('You cannot modify your own owner/landlord role or permissions.');
+      }
+
+      const allowedPropertiesStr = Array.isArray(body.allowedProperties)
+        ? body.allowedProperties.join(',')
+        : body.allowedProperties || 'all';
+
+      const permissionsObj = typeof body.permissions === 'string'
+        ? JSON.parse(body.permissions)
+        : (body.permissions || {});
+      permissionsObj.roleTitle = body.role;
+      const permissionsStr = JSON.stringify(permissionsObj);
+
+      await db
+        .update(schema.users)
+        .set({
+          role: 'manager',
+          allowedProperties: allowedPropertiesStr,
+          permissions: permissionsStr,
+        })
+        .where(eq(schema.users.id, memberId));
+
+      // Add audit log
+      await db.insert(schema.auditLogs).values({
+        id: 'audit-' + Math.random().toString(36).substring(2, 9),
+        ownerId: callerId,
+        organizationName: callerOrg,
+        actorName: req.user.name || 'Owner',
+        actorEmail: req.user.email,
+        actorInitials: (req.user.name || 'OW').split(' ').map((n: string) => n[0]).join('').toUpperCase(),
+        categoryIconName: 'Shield',
+        categoryLabel: 'Security',
+        description: `Updated member ${member.name} (${member.email}) permissions. Assigned Role: ${body.role}. Property Scope: ${allowedPropertiesStr}.`,
+        severity: 'medium',
+        status: 'success',
+        ip: req.ip || 'Unknown',
+        location: 'Unknown',
+      });
+
+      return { success: true, message: 'Member access updated successfully.' };
+    } catch (err: any) {
+      if (err instanceof BadRequestException || err instanceof NotFoundException) throw err;
+      throw new InternalServerErrorException(`Failed to update member access: ${err.message}`);
     }
   }
 }

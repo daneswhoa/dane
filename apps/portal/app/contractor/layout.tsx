@@ -102,7 +102,7 @@ function ContractorLayoutInner({ children }: { children: React.ReactNode }) {
                 <Shield className="w-5 h-5" /> Complete Your Contractor Profile
               </h3>
               <p className="text-xs text-paper-600 dark:text-ink-300 leading-relaxed">
-                Welcome to landlord.nl! Please take 60 seconds to finish setting up your profile details. This enables property managers to view your hourly rate, specialty, and request maintenance work orders.
+                Welcome to Dane Properties! Please take 60 seconds to finish setting up your profile details. This enables property managers to view your hourly rate, specialty, and request maintenance work orders.
               </p>
               <button 
                 onClick={() => setShowProfileWizard(true)}

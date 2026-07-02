@@ -8,6 +8,8 @@ import {
   ShieldCheck, XCircle, FileText
 } from 'lucide-react';
 import CreateInvoiceModal from './CreateInvoiceModal';
+import { usePermissionsStore } from '../store/usePermissionsStore';
+import { AccessDeniedOverlay } from './team/AccessDeniedOverlay';
 
 interface Invoice {
   id: string;
@@ -83,6 +85,10 @@ const defaultInvoices: Invoice[] = [
   },
 ];
 export default function InvoicesTab() {
+  const { checkPermission } = usePermissionsStore();
+  const canView = checkPermission('Finance', 'View Ledgers');
+  const canProcess = checkPermission('Finance', 'Process Payments');
+
   const router = useRouter();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -92,6 +98,7 @@ export default function InvoicesTab() {
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
+  const [deniedAction, setDeniedAction] = useState<string | null>(null);
   const itemsPerPage = 8;
 
   const loadInvoices = async () => {
@@ -158,8 +165,19 @@ export default function InvoicesTab() {
     document.body.removeChild(link);
   };
 
+  if (!canView) {
+    return <AccessDeniedOverlay moduleName="Finance" actionName="View Ledgers" />;
+  }
+
   return (
-    <div className="p-4 space-y-4 w-full animate-fade-in text-xs">
+    <div className="p-4 space-y-4 w-full animate-fade-in text-xs relative">
+      {deniedAction && (
+        <AccessDeniedOverlay 
+          moduleName="Finance" 
+          actionName={deniedAction} 
+          onClose={() => setDeniedAction(null)} 
+        />
+      )}
       
       {/* Metrics */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -244,7 +262,16 @@ export default function InvoicesTab() {
             <button onClick={handleExport} className="text-paper-600 dark:text-ink-200 hover:text-coral-500 font-bold flex items-center gap-1.5 px-2.5 py-1.5 ml-2 border border-transparent hover:bg-paper-100 dark:hover:bg-ink-800 rounded transition-all">
               <Download className="w-3.5 h-3.5" /> Export
             </button>
-            <button onClick={() => setShowCreateModal(true)} className="text-white bg-coral-500 hover:bg-coral-600 font-bold flex items-center gap-1.5 px-4 py-1.5 ml-2 rounded transition-all shadow-lg shadow-coral-500/20">
+            <button 
+              onClick={() => {
+                if (!canProcess) {
+                  setDeniedAction('Process Payments');
+                } else {
+                  setShowCreateModal(true);
+                }
+              }} 
+              className="text-white bg-coral-500 hover:bg-coral-600 font-bold flex items-center gap-1.5 px-4 py-1.5 ml-2 rounded transition-all shadow-lg shadow-coral-500/20"
+            >
               <PencilRuler className="w-3.5 h-3.5" /> Create Invoice
             </button>
           </div>
@@ -345,6 +372,10 @@ export default function InvoicesTab() {
                                     <button
                                       onClick={async () => {
                                         setActiveMenu(null);
+                                        if (!canProcess) {
+                                          setDeniedAction('Process Payments');
+                                          return;
+                                        }
                                         try {
                                           const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/invoices/${inv.id}/reconcile`, {
                                             method: 'POST',
@@ -368,6 +399,10 @@ export default function InvoicesTab() {
                                     <button
                                       onClick={async () => {
                                         setActiveMenu(null);
+                                        if (!canProcess) {
+                                          setDeniedAction('Process Payments');
+                                          return;
+                                        }
                                         try {
                                           const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/invoices/${inv.id}/cancel`, {
                                             method: 'POST',

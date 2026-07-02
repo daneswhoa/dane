@@ -14,8 +14,13 @@ import {
   Paperclip,
   Loader2
 } from 'lucide-react';
+import { usePermissionsStore } from '../store/usePermissionsStore';
+import { AccessDeniedOverlay } from './team/AccessDeniedOverlay';
 
 export default function LedgerTab() {
+  const { checkPermission } = usePermissionsStore();
+  const canView = checkPermission('Finance', 'View Ledgers');
+
   const [transactions, setTransactions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterType, setFilterType] = useState<'all' | 'revenue' | 'expenses'>('all');
@@ -124,6 +129,10 @@ export default function LedgerTab() {
 
   const netOperatingIncome = totalRevenue - totalExpenses;
   const cashBalance = netOperatingIncome; // Simple representation of flow
+
+  if (!canView) {
+    return <AccessDeniedOverlay moduleName="Finance" actionName="View Ledgers" />;
+  }
 
   return (
     <div className="p-4 space-y-4 max-w-7xl mx-auto w-full animate-fade-in">

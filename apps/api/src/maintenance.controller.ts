@@ -1,5 +1,5 @@
-import { Controller, Get, Post, Body, Param, Query, InternalServerErrorException, BadRequestException, UseGuards, Inject } from '@nestjs/common';
-import { eq, desc, inArray } from 'drizzle-orm';
+import { Controller, Get, Post, Body, Param, Query, InternalServerErrorException, BadRequestException, UseGuards, Inject, Req } from '@nestjs/common';
+import { eq, desc, inArray, and } from 'drizzle-orm';
 import * as schema from './db/schema';
 import { SessionGuard } from './auth/auth.guard';
 import { DATABASE_CONNECTION } from './db/database.module';
@@ -14,8 +14,12 @@ export class MaintenanceController {
   ) {}
 
   @Get('maintenance')
-  async getMaintenance(@Query('tenantId') tenantId?: string) {
+  async getMaintenance(@Req() req: any, @Query('tenantId') tenantId?: string) {
     const db = this.db;
+    const callerId = req.user.id;
+    const callerRole = req.user.role;
+    const callerOrg = req.user.organizationName || '';
+
     try {
       let query = db
         .select({
@@ -50,8 +54,22 @@ export class MaintenanceController {
         .leftJoin(schema.properties, eq(schema.tickets.propertyId, schema.properties.id))
         .leftJoin(schema.units, eq(schema.tickets.unitId, schema.units.id));
 
+      const conditions: any[] = [];
+      if (callerRole === 'tenant') {
+        conditions.push(eq(schema.tickets.tenantId, callerId));
+      } else if (callerRole === 'contractor') {
+        conditions.push(eq(schema.tickets.contractorId, callerId));
+      } else {
+        // Landlord/Manager
+        conditions.push(eq(schema.properties.organizationName, callerOrg));
+      }
+
       if (tenantId) {
-        query = query.where(eq(schema.tickets.tenantId, tenantId));
+        conditions.push(eq(schema.tickets.tenantId, tenantId));
+      }
+
+      if (conditions.length > 0) {
+        query = query.where(and(...conditions));
       }
 
       const list = await query.orderBy(desc(schema.tickets.createdAt));
@@ -79,28 +97,77 @@ export class MaintenanceController {
   }
 
   @Post('maintenance')
-  async createTicket(@Body() body: {
+  async createTicket(@Req() req: any, @Body() body: {
     title?: string;
     description: string;
     urgency: string;
     category?: string;
     propertyId?: string;
     unitId?: string;
-    ownerId: string;
+    ownerId?: string;
     tenantId?: string;
     contractorId?: string;
     hourlyRate?: number;
     maxAuthorization?: number;
   }) {
     const db = this.db;
-    if (!body.description || !body.urgency || !body.ownerId) {
-      throw new BadRequestException('description, urgency, and ownerId are required fields.');
+    const callerRole = req.user.role;
+
+    if (!body.description || !body.urgency) {
+      throw new BadRequestException('description and urgency are required fields.');
     }
     if (body.title && body.title.length > 150) {
       throw new BadRequestException('Title cannot exceed 150 characters.');
     }
     if (body.description.length > 1000) {
       throw new BadRequestException('Description cannot exceed 1000 characters.');
+    }
+
+    // 1. Property validation & security check
+    let targetProperty: any = null;
+    if (body.propertyId) {
+      const propList = await db.select().from(schema.properties).where(eq(schema.properties.id, body.propertyId)).limit(1);
+      if (propList.length === 0) {
+        throw new BadRequestException('Property not found.');
+      }
+      targetProperty = propList[0];
+
+      // Managers/Teammates must belong to the same organization
+      if (callerRole !== 'tenant' && targetProperty.organizationName !== req.user.organizationName) {
+        throw new BadRequestException('Access denied. You do not have permission to manage this property.');
+      }
+
+      // Teammates with restricted allowedProperties scope must be allowed to write to this property
+      if (callerRole !== 'tenant' && req.user.permissions && req.user.allowedProperties && req.user.allowedProperties !== 'all') {
+        const allowedIds = req.user.allowedProperties.split(',');
+        if (!allowedIds.includes(body.propertyId)) {
+          throw new BadRequestException('Access denied. You do not have permission to manage this property.');
+        }
+      }
+
+      // Tenants can only create tickets for their own unit/property
+      if (callerRole === 'tenant') {
+        const unitList = await db.select().from(schema.units).where(eq(schema.units.tenantId, req.user.id)).limit(1);
+        if (unitList.length === 0 || unitList[0].propertyId !== body.propertyId) {
+          throw new BadRequestException('Access denied. You can only submit requests for your own property.');
+        }
+      }
+    }
+
+    // 2. Unit validation & security check
+    if (body.unitId) {
+      const unitRec = await db.select().from(schema.units).where(eq(schema.units.id, body.unitId)).limit(1);
+      if (unitRec.length === 0) {
+        throw new BadRequestException('Unit not found.');
+      }
+      if (body.propertyId && unitRec[0].propertyId !== body.propertyId) {
+        throw new BadRequestException('Unit does not belong to the selected property.');
+      }
+
+      // If caller is tenant, they must live in this unit
+      if (callerRole === 'tenant' && unitRec[0].tenantId !== req.user.id) {
+        throw new BadRequestException('Access denied. You can only submit requests for your own unit.');
+      }
     }
 
     try {
@@ -126,6 +193,28 @@ export class MaintenanceController {
         }
       }
 
+      // 3. Resolve organizationName and ownerId securely
+      let orgName = req.user.organizationName || null;
+      if (targetProperty && targetProperty.organizationName) {
+        orgName = targetProperty.organizationName;
+      }
+
+      let resolvedOwnerId = body.ownerId;
+      if (!resolvedOwnerId) {
+        if (targetProperty) {
+          resolvedOwnerId = targetProperty.ownerId;
+        }
+        if (!resolvedOwnerId && orgName) {
+          const orgOwner = await db.select().from(schema.users).where(and(eq(schema.users.organizationName, orgName), eq(schema.users.role, 'landlord'))).limit(1);
+          if (orgOwner.length > 0) {
+            resolvedOwnerId = orgOwner[0].id;
+          }
+        }
+        if (!resolvedOwnerId) {
+          resolvedOwnerId = req.user.id;
+        }
+      }
+
       await db.insert(schema.tickets).values({
         id: ticketId,
         title: body.title || body.description.slice(0, 50),
@@ -137,7 +226,8 @@ export class MaintenanceController {
         tenantEmail: tenantEmail || null,
         propertyId: body.propertyId || null,
         unitId: body.unitId || null,
-        ownerId: body.ownerId,
+        ownerId: resolvedOwnerId,
+        organizationName: orgName || null,
         contractorId: body.contractorId || null,
         hourlyRate: body.hourlyRate || null,
         maxAuthorization: body.maxAuthorization || null,
@@ -180,10 +270,23 @@ export class MaintenanceController {
       }
       const tkt = tktList[0];
 
+      // Resolve contractorId to user_id if it starts with 'contractor-'
+      let resolvedContractorUserId = body.contractorId;
+      if (body.contractorId.startsWith('contractor-')) {
+        const cRec = await db.select().from(schema.contractors).where(eq(schema.contractors.id, body.contractorId)).limit(1);
+        if (cRec.length === 0) {
+          throw new BadRequestException(`Contractor not found with ID: ${body.contractorId}`);
+        }
+        if (!cRec[0].userId) {
+          throw new BadRequestException(`Contractor ${cRec[0].name} has no associated user account.`);
+        }
+        resolvedContractorUserId = cRec[0].userId;
+      }
+
       await db
         .update(schema.tickets)
         .set({
-          contractorId: body.contractorId,
+          contractorId: resolvedContractorUserId,
           hourlyRate: body.hourlyRate || null,
           maxAuthorization: body.maxAuthorization || null,
           status: 'assigned',
@@ -192,7 +295,7 @@ export class MaintenanceController {
 
       // Notify contractor
       await this.realtimeService.sendNotification(
-        body.contractorId,
+        resolvedContractorUserId,
         'New Job Assigned',
         `You have been assigned to: "${tkt.title || tkt.description.slice(0, 50)}".`,
         '/contractor/jobs',
@@ -330,6 +433,7 @@ export class MaintenanceController {
             unitId: tkt.unitId || null,
             propertyId: tkt.propertyId || null,
             ownerId: tkt.ownerId,
+            organizationName: tkt.organizationName || null,
             amount: tkt.amount || body.amount,
             description: `Settled billing for Maintenance Ticket #${tkt.id.toUpperCase()}: ${tkt.title || tkt.description}`,
             status: 'PAID',

@@ -52,7 +52,7 @@ function ResetPasswordForm() {
           setLoading(false);
           setSuccess(true);
         },
-        onError: (ctx) => {
+        onError: (ctx: any) => {
           setLoading(false);
           setError(ctx.error.message || 'Failed to reset password. The link may have expired.');
         }

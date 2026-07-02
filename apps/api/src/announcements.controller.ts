@@ -25,10 +25,12 @@ export class AnnouncementsController {
     }
   ) {
     const ownerId = req.user.id;
+    const callerOrg = req.user.organizationName || '';
 
     // 1. Query matching tenants
     const conditions = [
-      eq(schema.users.role, 'tenant')
+      eq(schema.users.role, 'tenant'),
+      eq(schema.properties.organizationName, callerOrg)
     ];
 
     if (body.audienceType === 'property' && body.targetPropertyId) {
@@ -49,6 +51,7 @@ export class AnnouncementsController {
       })
       .from(schema.users)
       .innerJoin(schema.units, eq(schema.units.tenantId, schema.users.id))
+      .innerJoin(schema.properties, eq(schema.units.propertyId, schema.properties.id))
       .where(and(...conditions));
 
     // Handle "with arrears due date" filter if needed
@@ -74,6 +77,7 @@ export class AnnouncementsController {
     await this.db.insert(schema.announcements).values({
       id: announcementId,
       ownerId,
+      organizationName: callerOrg || null,
       title: body.title,
       content: body.content,
       audienceType: body.audienceType,
@@ -97,6 +101,7 @@ export class AnnouncementsController {
     await this.db.insert(schema.auditLogs).values({
       id: 'audit-' + Math.random().toString(36).substring(2, 9),
       ownerId,
+      organizationName: callerOrg || null,
       actorName: req.user.name || 'Owner',
       actorEmail: req.user.email,
       actorInitials: (req.user.name || 'OW').split(' ').map((n: string) => n[0]).join('').toUpperCase(),
@@ -173,11 +178,11 @@ export class AnnouncementsController {
         return true;
       });
     } else {
-      // Manager/Owner sees their sent history
+      // Manager/Owner sees their organization's sent history
       return this.db
         .select()
         .from(schema.announcements)
-        .where(eq(schema.announcements.ownerId, userId))
+        .where(eq(schema.announcements.organizationName, req.user.organizationName || ''))
         .orderBy(desc(schema.announcements.createdAt));
     }
   }

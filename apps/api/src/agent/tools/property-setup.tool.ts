@@ -1,5 +1,6 @@
 import { eq, inArray } from 'drizzle-orm';
 import * as schema from '../../db/schema';
+import { checkToolPermission } from './permissions';
 
 export interface UnitConfig {
   unitId?: string;
@@ -125,19 +126,31 @@ function generateUnitsFromConvention(unitsCount: number, convention?: string): {
 export class PropertySetupTool {
   static async getPropertiesSetupStatus(
     args: {},
-    context: { db: any; userId: string; userRole: string }
+    context: { db: any; userId: string; userRole: string; user?: any }
   ) {
     if (!context || !context.db) {
       return { success: false, error: 'Database context not available' };
     }
 
-    const { db, userId } = context;
+    const { db, userId, user } = context;
+
+    // Check permissions
+    if (user && !checkToolPermission(user, 'Properties', 'View Properties')) {
+      return { success: false, error: 'Access Denied: You do not have permission to view properties.' };
+    }
 
     try {
+      const userExist = await db.select().from(schema.users).where(eq(schema.users.id, userId)).limit(1);
+      const orgName = userExist[0]?.organizationName || null;
+
       const props = await db
         .select()
         .from(schema.properties)
-        .where(eq(schema.properties.ownerId, userId));
+        .where(
+          orgName
+            ? eq(schema.properties.organizationName, orgName)
+            : eq(schema.properties.ownerId, userId)
+        );
 
       const result = [];
 
@@ -222,13 +235,19 @@ export class PropertySetupTool {
 
   static async setupOrUpdatePropertyAndUnits(
     args: SetupOrUpdatePropertyArgs,
-    context: { db: any; userId: string; userRole: string }
+    context: { db: any; userId: string; userRole: string; user?: any }
   ) {
     if (!context || !context.db) {
       return { success: false, error: 'Database context not available' };
     }
 
-    const { db, userId } = context;
+    const { db, userId, user } = context;
+
+    // Check permissions
+    if (user && !checkToolPermission(user, 'Properties', 'Edit')) {
+      return { success: false, error: 'Access Denied: You do not have permission to edit property setup.' };
+    }
+
     const { propertyId, name, address, photoUrl, unitsCount, settings, status, units: unitConfigs, namingConvention } = args;
 
     try {
@@ -243,8 +262,11 @@ export class PropertySetupTool {
       }
 
       const property = propList[0];
-      if (property.ownerId !== userId) {
-        return { success: false, error: 'Access denied. You do not own this property.' };
+      const userExist = await db.select().from(schema.users).where(eq(schema.users.id, userId)).limit(1);
+      const orgName = userExist[0]?.organizationName || null;
+
+      if (property.ownerId !== userId && (!orgName || property.organizationName !== orgName)) {
+        return { success: false, error: 'Access denied. You do not have permissions to configure this property.' };
       }
 
       const propUpdate: any = {};
@@ -456,6 +478,7 @@ export class PropertySetupTool {
       await db.insert(schema.auditLogs).values({
         id: 'audit-' + Math.random().toString(36).substring(2, 9),
         ownerId: userId,
+        organizationName: property.organizationName,
         actorName: 'Sophia AI',
         actorEmail: 'sophia@landlord.nl',
         actorInitials: 'SA',

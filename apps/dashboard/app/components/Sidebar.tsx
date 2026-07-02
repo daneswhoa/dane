@@ -254,11 +254,11 @@ export default function Sidebar({
         {/* Brand Header */}
         <div className="h-12 border-b border-paper-200 dark:border-ink-800 flex items-center justify-between px-3 gap-2 transition-colors duration-200">
           <div className="flex items-center gap-2 min-w-0">
-            <img src="/logomark.png" alt="Landlord.nl" className="w-6 h-6 object-contain flex-shrink-0" />
+            <img src="/logomark.png" alt="Dane Properties" className="w-6 h-6 object-contain flex-shrink-0" />
             <span className={`font-semibold text-paper-900 dark:text-white tracking-tight transition-all duration-300 overflow-hidden whitespace-nowrap ${
               collapsed && !mobileOpen ? 'w-0 opacity-0 group-hover/sidebar:w-auto group-hover/sidebar:opacity-100 group-hover/sidebar:ml-0.5' : 'w-auto opacity-100'
             }`}>
-              Landlord.nl
+              Dane Properties
             </span>
           </div>
           {mobileOpen && onCloseMobile ? (

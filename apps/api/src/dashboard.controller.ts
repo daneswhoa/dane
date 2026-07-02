@@ -81,6 +81,26 @@ export class DashboardController {
     return { success: true, logoUrl, message: 'Organization setup successfully' };
   }
 
+  @Get('profile')
+  async getProfile(@Req() req: any) {
+    const userId = req.user.id;
+    const userExist = await this.db.select().from(users).where(eq(users.id, userId)).limit(1);
+    if (userExist.length === 0) {
+      throw new BadRequestException('User not found.');
+    }
+    const user = userExist[0];
+    return {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      organizationName: user.organizationName,
+      username: user.username,
+      image: user.image,
+      permissions: user.permissions || null,
+    };
+  }
+
   @Get('todos')
   async getTodos(@Req() req: any) {
     const userId = req.user.id;

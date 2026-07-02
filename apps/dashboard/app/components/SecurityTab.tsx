@@ -7,8 +7,13 @@ import {
   ListTree, HelpCircle
 } from 'lucide-react';
 import { useAuditStore, LogSeverity } from '../store/useAuditStore';
+import { usePermissionsStore } from '../store/usePermissionsStore';
+import { AccessDeniedOverlay } from './team/AccessDeniedOverlay';
 
 export default function SecurityTab() {
+  const { checkPermission } = usePermissionsStore();
+  const canViewLogs = checkPermission('Security and Audit', 'View Audit Logs');
+
   const { logs, fetchLogs, isLoading, totalLogs, totalPages } = useAuditStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
@@ -62,6 +67,10 @@ export default function SecurityTab() {
     }
     return buttons;
   };
+
+  if (!canViewLogs) {
+    return <AccessDeniedOverlay moduleName="Security and Audit" actionName="View Audit Logs" />;
+  }
 
   return (
     <div className="p-6 max-w-6xl mx-auto w-full space-y-8 pb-20 animate-fade-in">

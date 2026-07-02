@@ -32,22 +32,23 @@ async function createContractorPayout(db: any, ticket: any, amount: number, user
           const stripe = new Stripe(stripeKey, { apiVersion: '2023-10-16' });
           try {
             await stripe.transfers.create({
-            amount: Math.round(amount * 100),
-            currency: 'usd',
-            destination: stripeAccountId,
-            description: `Payment for Maintenance Ticket #${ticket.id}`,
-          });
+              amount: Math.round(amount * 100),
+              currency: 'usd',
+              destination: stripeAccountId,
+              description: `Payment for Maintenance Ticket #${ticket.id}`,
+            });
 
-          await db.insert(schema.financialAudits).values({
-            userId: contractorId,
-            action: 'payout_initiated',
-            amount: amount,
-            currency: 'usd',
-            referenceId: ticket.id,
-            status: 'succeeded',
-          });
-        } catch (stripeErr: any) {
-          console.error('Stripe transfer failed:', stripeErr.message);
+            await db.insert(schema.financialAudits).values({
+              userId: contractorId,
+              action: 'payout_initiated',
+              amount: amount,
+              currency: 'usd',
+              referenceId: ticket.id,
+              status: 'succeeded',
+            });
+          } catch (stripeErr: any) {
+            console.error('Stripe transfer failed:', stripeErr.message);
+          }
         }
       }
     }

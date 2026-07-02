@@ -9,7 +9,7 @@ export class EmailService {
       return false;
     }
 
-    const fromEmail = 'landlord.hu <no-reply@mylandlordservices.com>';
+    const fromEmail = 'landlord.hu <no-reply@danesproperties.com>';
 
     try {
       const res = await fetch('https://api.resend.com/emails', {

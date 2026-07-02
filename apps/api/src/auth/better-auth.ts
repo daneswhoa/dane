@@ -26,7 +26,7 @@ async function sendEmail({ to, subject, html }: { to: string; subject: string; h
   }
 
   // Use the user's domain in production, or fallback for verification
-  const fromEmail = 'landlord.hu <no-reply@mylandlordservices.com>';
+  const fromEmail = 'landlord.hu <no-reply@danesproperties.com>';
 
   try {
     const res = await fetch('https://api.resend.com/emails', {

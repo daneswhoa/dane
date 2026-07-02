@@ -237,7 +237,7 @@ function RegisterWizardContent() {
           setErrorModal({
             show: true,
             title: "We couldn't create your account",
-            message: "This email address is already in use. If this belongs to you, please sign in instead or contact us at help@mylandlordservices.com."
+            message: "This email address is already in use. If this belongs to you, please sign in instead or contact us at help@danesproperties.com."
           });
           return;
         }
@@ -271,7 +271,7 @@ function RegisterWizardContent() {
           setErrorModal({
             show: true,
             title: "We couldn't create your account",
-            message: `${ctx.error.message || 'An unexpected authentication error occurred'}. If this info isn't helpful, please contact us at help@mylandlordservices.com.`
+            message: `${ctx.error.message || 'An unexpected authentication error occurred'}. If this info isn't helpful, please contact us at help@danesproperties.com.`
           });
         }
       });
@@ -280,7 +280,7 @@ function RegisterWizardContent() {
       setErrorModal({
         show: true,
         title: "We couldn't create your account",
-        message: `${err.message || 'A network error occurred while connecting to the authentication server'}. If this info isn't helpful, please contact us at help@mylandlordservices.com.`
+        message: `${err.message || 'A network error occurred while connecting to the authentication server'}. If this info isn't helpful, please contact us at help@danesproperties.com.`
       });
     }
   };
@@ -300,7 +300,7 @@ function RegisterWizardContent() {
       setErrorModal({
         show: true,
         title: "Could not send code",
-        message: `${err.message || 'We failed to deliver the 6-digit OTP code to your inbox'}. Please try again or contact us at help@mylandlordservices.com.`
+        message: `${err.message || 'We failed to deliver the 6-digit OTP code to your inbox'}. Please try again or contact us at help@danesproperties.com.`
       });
       throw err;
     }
@@ -355,7 +355,7 @@ function RegisterWizardContent() {
       setErrorModal({
         show: true,
         title: "Verification failed",
-        message: `${err.message || 'We could not verify your email address'}. If this info isn't helpful, please contact us at help@mylandlordservices.com.`
+        message: `${err.message || 'We could not verify your email address'}. If this info isn't helpful, please contact us at help@danesproperties.com.`
       });
     }
   };

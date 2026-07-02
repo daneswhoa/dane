@@ -19,7 +19,7 @@ export default function Hero() {
       </p>
 
       <div className="flex flex-col sm:flex-row gap-4 items-center justify-center w-full sm:w-auto">
-        <a href="/register" className="bg-white text-dark-900 px-8 py-3.5 rounded-full font-semibold flex items-center gap-2 hover:bg-paper-100 transition-all hover:scale-105 w-full sm:w-auto justify-center shadow-lg">
+        <a href="https://app.danesproperties.com/register" className="bg-white text-dark-900 px-8 py-3.5 rounded-full font-semibold flex items-center gap-2 hover:bg-paper-100 transition-all hover:scale-105 w-full sm:w-auto justify-center shadow-lg">
           Start Free Trial <ArrowUpRight className="w-4 h-4 text-dark-900" />
         </a>
         <a href="#features" className="px-8 py-3.5 rounded-full font-medium text-white flex items-center gap-2 hover:bg-white/5 transition-all border border-transparent hover:border-white/10 w-full sm:w-auto justify-center">

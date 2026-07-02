@@ -30,7 +30,7 @@ export default function CurrencyExchangeSection() {
           ))}
         </div>
 
-        <a href="/register" className="inline-flex items-center gap-2 bg-white text-dark-900 px-6 py-2.5 rounded-full text-sm font-semibold hover:bg-paper-100 transition-all hover:scale-105">
+        <a href="https://app.danesproperties.com/register" className="inline-flex items-center gap-2 bg-white text-dark-900 px-6 py-2.5 rounded-full text-sm font-semibold hover:bg-paper-100 transition-all hover:scale-105">
           Explore Features <ArrowUpRight className="w-4 h-4" />
         </a>
       </div>

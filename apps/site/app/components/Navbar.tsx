@@ -15,8 +15,8 @@ export default function Navbar() {
       </div>
 
       <div className="flex items-center gap-4">
-        <a href="/login" className="text-sm font-medium text-paper-300 hover:text-white transition-colors">Login</a>
-        <a href="/register" className="bg-white text-dark-900 px-5 py-2.5 rounded-full text-sm font-semibold hover:bg-paper-100 transition-colors">Sign Up</a>
+        <a href="https://app.danesproperties.com/login" className="text-sm font-medium text-paper-300 hover:text-white transition-colors">Login</a>
+        <a href="https://app.danesproperties.com/register" className="bg-white text-dark-900 px-5 py-2.5 rounded-full text-sm font-semibold hover:bg-paper-100 transition-colors">Sign Up</a>
       </div>
     </nav>
   );

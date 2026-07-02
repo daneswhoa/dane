@@ -43,9 +43,9 @@ export default function PricingCard({ title, price, desc, features, isPro }: Pri
         </ul>
       </div>
       
-      <button className={`w-full font-medium py-3 rounded-xl transition-all text-sm ${
+      <a href="https://app.danesproperties.com/register" className={`w-full block text-center font-medium py-3 rounded-xl transition-all text-sm ${
         isPro ? 'bg-primary hover:bg-primary/95 text-white shadow-lg' : 'bg-white/5 hover:bg-white/10 text-white border border-white/10'
-      }`}>Get Started</button>
+      }`}>Get Started</a>
     </div>
   );
 }

@@ -3,9 +3,9 @@ import PricingCard from './PricingCard';
 
 export default function PricingSection() {
   const plans = [
-    { title: 'Basic Plan', price: '€19', desc: 'Ideal for independent managers with small portfolios.', features: ['Up to 5 properties', 'Automatic invoice dispatch', 'Standard tenant portals', 'Email customer support'] },
-    { title: 'Pro Plan', price: '€39', desc: 'Best for growing property businesses and managers.', features: ['Up to 25 properties', 'Sophia AI assistant dispatch', 'SMS billing & reminders', 'Priority tenant support'], isPro: true },
-    { title: 'Premium Plan', price: '€89', desc: 'Ultimate access for enterprise and scale managers.', features: ['Unlimited properties', 'Full AI routing & booking', 'Custom lease builders', 'Dedicated account manager'] },
+    { title: 'Basic Plan', price: 'KES 2,500', desc: 'Ideal for independent managers with small portfolios.', features: ['Up to 5 properties', 'Automatic invoice dispatch', 'Standard tenant portals', 'Email customer support'] },
+    { title: 'Pro Plan', price: 'KES 5,500', desc: 'Best for growing property businesses and managers.', features: ['Up to 25 properties', 'Sophia AI assistant dispatch', 'SMS billing & reminders', 'Priority tenant support'], isPro: true },
+    { title: 'Premium Plan', price: 'KES 12,500', desc: 'Ultimate access for enterprise and scale managers.', features: ['Unlimited properties', 'Full AI routing & booking', 'Custom lease builders', 'Dedicated account manager'] },
   ];
 
   return (

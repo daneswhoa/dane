@@ -1,38 +1,41 @@
-import { Controller, Get, Post, Put, Param, Body, Req, UnauthorizedException, BadRequestException, NotFoundException, InternalServerErrorException, UseGuards, Inject } from '@nestjs/common';
+import { Controller, Get, Post, Put, Param, Body, Req, UnauthorizedException, BadRequestException, NotFoundException, InternalServerErrorException, UseGuards, Inject, Query } from '@nestjs/common';
 import * as schema from './db/schema';
-import { eq, and, inArray } from 'drizzle-orm';
+import { eq, and, inArray, desc, sql } from 'drizzle-orm';
 import { randomBytes } from 'crypto';
 import { SessionGuard } from './auth/auth.guard';
+import { CreditLedgerService } from './agent/credit-ledger.service';
 import { DATABASE_CONNECTION } from './db/database.module';
 import { EmailService } from './email.service';
+import Stripe from 'stripe';
 
 @Controller('dashboard/team')
 @UseGuards(SessionGuard)
 export class TeamController {
   constructor(
     @Inject(DATABASE_CONNECTION) private readonly db: any,
-    private readonly emailService: EmailService
+    private readonly emailService: EmailService,
+    private readonly creditLedgerService: CreditLedgerService
   ) {}
   
   @Get()
   async getTeamRoster(@Req() req: any) {
     const db = this.db;
     const ownerId = req.user?.id || 'current-user-id';
-    const callerOrg = req.user?.organizationName || '';
+    const callerOrgId = req.user?.organizationId || '';
     
     try {
       let teamUsers: any[] = [];
-      if (callerOrg) {
+      if (callerOrgId) {
         teamUsers = await db.select().from(schema.users).where(
-          eq(schema.users.organizationName, callerOrg)
+          eq(schema.users.organizationId, callerOrgId)
         );
       }
 
       // Get pending invites
       let pendingInvites: any[] = [];
-      if (callerOrg) {
+      if (callerOrgId) {
         pendingInvites = await db.select().from(schema.invitations).where(
-          and(eq(schema.invitations.organizationName, callerOrg), eq(schema.invitations.used, false))
+          and(eq(schema.invitations.organizationId, callerOrgId), eq(schema.invitations.used, false))
         );
       } else {
         pendingInvites = await db.select().from(schema.invitations).where(
@@ -83,6 +86,41 @@ export class TeamController {
     }
 
     try {
+      // Premium check
+      let isPremium = false;
+      if (req.user.organizationId) {
+        const orgSubs = await db
+          .select()
+          .from(schema.subscriptions)
+          .innerJoin(schema.users, eq(schema.subscriptions.userId, schema.users.id))
+          .where(
+            and(
+              eq(schema.users.organizationId, req.user.organizationId),
+              eq(schema.subscriptions.tier, 'premium'),
+              eq(schema.subscriptions.status, 'active')
+            )
+          )
+          .limit(1);
+        isPremium = orgSubs.length > 0;
+      } else {
+        const userSubs = await db
+          .select()
+          .from(schema.subscriptions)
+          .where(
+            and(
+              eq(schema.subscriptions.userId, ownerId),
+              eq(schema.subscriptions.tier, 'premium'),
+              eq(schema.subscriptions.status, 'active')
+            )
+          )
+          .limit(1);
+        isPremium = userSubs.length > 0;
+      }
+
+      if (!isPremium) {
+        throw new BadRequestException('Access Denied: Team invitations require a Premium subscription ($2/mo). Please upgrade in the Organization Settings tab.');
+      }
+
       const inviteCode = `LNL-TEAM-${randomBytes(4).toString('hex').toUpperCase()}`;
       
       const expireDate = new Date();
@@ -98,13 +136,15 @@ export class TeamController {
       permissionsObj.roleTitle = body.role; // Embed selected role title inside the permissions object
       const permissionsStr = JSON.stringify(permissionsObj);
 
-      // Get owner details to find organization Name
+      // Get owner details to find organization details
       const owner = await db.select().from(schema.users).where(eq(schema.users.id, ownerId)).limit(1);
+      const orgId = owner[0]?.organizationId || null;
       const orgName = owner[0]?.organizationName || 'Dane Properties';
 
       await db.insert(schema.invitations).values({
         id: inviteCode,
         ownerId,
+        organizationId: orgId,
         organizationName: orgName,
         email: body.email,
         targetRole: body.role,
@@ -152,15 +192,15 @@ export class TeamController {
   @Get('org-stats')
   async getOrgStats(@Req() req: any) {
     const db = this.db;
-    const callerOrg = req.user.organizationName || '';
+    const callerOrgId = req.user.organizationId || '';
 
     try {
       let props: any[] = [];
-      if (callerOrg) {
+      if (callerOrgId) {
         props = await db
           .select()
           .from(schema.properties)
-          .where(eq(schema.properties.organizationName, callerOrg));
+          .where(eq(schema.properties.organizationId, callerOrgId));
       }
 
       const propIds = props.map((p: any) => p.id);
@@ -254,6 +294,7 @@ export class TeamController {
   ) {
     const db = this.db;
     const ownerId = req.user.id;
+    const orgId = req.user.organizationId;
 
     if (!body.organizationName || !body.username) {
       throw new BadRequestException('Organization name and username are required.');
@@ -276,6 +317,13 @@ export class TeamController {
           username: body.username,
         })
         .where(eq(schema.users.id, ownerId));
+
+      if (orgId) {
+        await db
+          .update(schema.organizations)
+          .set({ name: body.organizationName })
+          .where(eq(schema.organizations.id, orgId));
+      }
 
       return { success: true, message: 'Organization identity updated successfully.' };
     } catch (err: any) {
@@ -318,13 +366,15 @@ export class TeamController {
           throw new BadRequestException('Invite code has expired.');
         }
 
+        const orgId = invite.organizationId || null;
         const orgName = invite.organizationName || 'Dane Properties';
 
-        // Update user's role and organizationName in database
+        // Update user's role and organization details in database
         await tx
           .update(schema.users)
           .set({
             role: 'manager', // Always set to manager role at platform level
+            organizationId: orgId,
             organizationName: orgName,
             allowedProperties: invite.allowedProperties,
             permissions: invite.permissions,
@@ -364,13 +414,13 @@ export class TeamController {
     const db = this.db;
     const callerId = req.user.id;
     const callerRole = req.user.role;
-    const callerOrg = req.user.organizationName;
+    const callerOrgId = req.user.organizationId;
 
     if (callerRole !== 'landlord' && callerRole !== 'manager') {
       throw new BadRequestException('Access denied. Only organization leaders can modify member permissions.');
     }
 
-    if (!callerOrg) {
+    if (!callerOrgId) {
       throw new BadRequestException('Caller organization is not configured.');
     }
 
@@ -379,7 +429,7 @@ export class TeamController {
       const members = await db
         .select()
         .from(schema.users)
-        .where(and(eq(schema.users.id, memberId), eq(schema.users.organizationName, callerOrg)))
+        .where(and(eq(schema.users.id, memberId), eq(schema.users.organizationId, callerOrgId)))
         .limit(1);
 
       if (members.length === 0) {
@@ -415,7 +465,8 @@ export class TeamController {
       await db.insert(schema.auditLogs).values({
         id: 'audit-' + Math.random().toString(36).substring(2, 9),
         ownerId: callerId,
-        organizationName: callerOrg,
+        organizationId: callerOrgId || null,
+        organizationName: req.user.organizationName || null,
         actorName: req.user.name || 'Owner',
         actorEmail: req.user.email,
         actorInitials: (req.user.name || 'OW').split(' ').map((n: string) => n[0]).join('').toUpperCase(),
@@ -432,6 +483,364 @@ export class TeamController {
     } catch (err: any) {
       if (err instanceof BadRequestException || err instanceof NotFoundException) throw err;
       throw new InternalServerErrorException(`Failed to update member access: ${err.message}`);
+    }
+  }
+
+  @Get('billing-info')
+  async getBillingInfo(@Req() req: any, @Query('startDate') startDate?: string, @Query('endDate') endDate?: string) {
+    const db = this.db;
+    const callerId = req.user.id;
+    const orgId = req.user.organizationId;
+    
+    // Resolve organization owner or fallback to caller
+    let ownerId = callerId;
+    if (orgId) {
+      const orgOwner = await db.select().from(schema.users).where(and(eq(schema.users.organizationId, orgId), eq(schema.users.role, 'landlord'))).limit(1);
+      if (orgOwner.length > 0) {
+        ownerId = orgOwner[0].id;
+      }
+    }
+    
+    const ownerUser = await db.select().from(schema.users).where(eq(schema.users.id, ownerId)).limit(1);
+    const ownerEmail = ownerUser[0]?.email;
+    
+    // Fetch active subscription
+    const subRec = await db
+      .select()
+      .from(schema.subscriptions)
+      .where(eq(schema.subscriptions.userId, ownerId))
+      .limit(1);
+    
+    const subscription = subRec[0] || { tier: 'free', status: 'active', expiresAt: null };
+    
+    // Fetch token balance
+    let tokenBalance = 0;
+    if (ownerEmail) {
+      tokenBalance = await this.creditLedgerService.resolveBalance(ownerEmail);
+    }
+    
+    // Fetch teammates
+    let teamEmails: string[] = [];
+    let teammates: any[] = [];
+    if (orgId) {
+      teammates = await db.select().from(schema.users).where(eq(schema.users.organizationId, orgId));
+      teamEmails = teammates.map(t => t.email);
+    } else {
+      teammates = [req.user];
+      teamEmails = [req.user.email];
+    }
+    
+    // Fetch date-filtered teammate usage from creditTransactions
+    let usage: any[] = [];
+    if (teamEmails.length > 0) {
+      usage = await db
+        .select()
+        .from(schema.creditTransactions)
+        .where(
+          and(
+            inArray(schema.creditTransactions.senderUsername, teamEmails),
+            eq(schema.creditTransactions.transactionType, 'spend')
+          )
+        )
+        .orderBy(desc(schema.creditTransactions.timestamp));
+    }
+    
+    if (startDate) {
+      const start = new Date(startDate);
+      usage = usage.filter((u: any) => new Date(u.timestamp) >= start);
+    }
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      usage = usage.filter((u: any) => new Date(u.timestamp) <= end);
+    }
+    
+    const usageMapped = usage.map((u: any) => {
+      const teammate = teammates.find(t => t.email.toLowerCase() === u.senderUsername.toLowerCase());
+      return {
+        txid: u.id,
+        teammateName: teammate?.name || u.senderUsername.split('@')[0],
+        teammateEmail: u.senderUsername,
+        amount: u.amount,
+        category: u.operationCategory,
+        description: u.description,
+        timestamp: u.timestamp
+      };
+    });
+    
+    return {
+      subscription,
+      tokenBalance,
+      usage: usageMapped
+    };
+  }
+
+  @Post('billing/subscribe')
+  async subscribePremium(@Req() req: any) {
+    const db = this.db;
+    const callerId = req.user.id;
+    const orgId = req.user.organizationId;
+    
+    let ownerId = callerId;
+    if (orgId) {
+      const orgOwner = await db.select().from(schema.users).where(and(eq(schema.users.organizationId, orgId), eq(schema.users.role, 'landlord'))).limit(1);
+      if (orgOwner.length > 0) {
+        ownerId = orgOwner[0].id;
+      }
+    }
+    
+    const existing = await db.select().from(schema.subscriptions).where(eq(schema.subscriptions.userId, ownerId)).limit(1);
+    if (existing.length > 0) {
+      await db
+        .update(schema.subscriptions)
+        .set({
+          tier: 'premium',
+          status: 'active',
+          expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+          updatedAt: new Date()
+        })
+        .where(eq(schema.subscriptions.userId, ownerId));
+    } else {
+      await db.insert(schema.subscriptions).values({
+        id: 'sub-' + Math.random().toString(36).substring(2, 9),
+        userId: ownerId,
+        tier: 'premium',
+        status: 'active',
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      });
+    }
+    
+    return { success: true };
+  }
+
+  @Post('billing/cancel-subscription')
+  async cancelPremium(@Req() req: any) {
+    const db = this.db;
+    const callerId = req.user.id;
+    const orgId = req.user.organizationId;
+    
+    let ownerId = callerId;
+    if (orgId) {
+      const orgOwner = await db.select().from(schema.users).where(and(eq(schema.users.organizationId, orgId), eq(schema.users.role, 'landlord'))).limit(1);
+      if (orgOwner.length > 0) {
+        ownerId = orgOwner[0].id;
+      }
+    }
+    
+    await db
+      .update(schema.subscriptions)
+      .set({
+        tier: 'free',
+        status: 'cancelled',
+        expiresAt: null,
+        updatedAt: new Date()
+      })
+      .where(eq(schema.subscriptions.userId, ownerId));
+    
+    return { success: true };
+  }
+
+  @Post('billing/recharge')
+  async rechargeCredits(@Req() req: any, @Body() body: { amount: number }) {
+    const db = this.db;
+    const callerId = req.user.id;
+    const orgId = req.user.organizationId;
+    
+    if (!body.amount || body.amount <= 0) {
+      throw new BadRequestException('Amount must be positive');
+    }
+    
+    let ownerId = callerId;
+    if (orgId) {
+      const orgOwner = await db.select().from(schema.users).where(and(eq(schema.users.organizationId, orgId), eq(schema.users.role, 'landlord'))).limit(1);
+      if (orgOwner.length > 0) {
+        ownerId = orgOwner[0].id;
+      }
+    }
+    
+    const ownerUser = await db.select().from(schema.users).where(eq(schema.users.id, ownerId)).limit(1);
+    const ownerEmail = ownerUser[0]?.email;
+    if (!ownerEmail) {
+      throw new BadRequestException('Owner email not found');
+    }
+    
+    const reserveBalance = await this.creditLedgerService.resolveBalance('RESERVE');
+    if (reserveBalance < body.amount) {
+      await this.creditLedgerService.mintCredits(body.amount * 10, 'Automated reserve liquidity refill');
+    }
+    
+    await this.creditLedgerService.transferCredits(
+      'RESERVE',
+      ownerEmail,
+      body.amount,
+      'purchase',
+      'manual_adjust',
+      `Purchased credit top-up of ${body.amount} tokens`
+    );
+    
+    return { success: true };
+  }
+
+  @Post('billing/checkout-session')
+  async createCheckoutSession(@Req() req: any, @Body() body: { type: 'premium' | 'credits', amount?: number }) {
+    const db = this.db;
+    const callerId = req.user.id;
+    
+    const stripeKey = process.env.STRIPE_SECRET_KEY || 'sk_test_51TlIGlEniOjmW1hm...';
+    const stripeInstance = new Stripe(stripeKey, { apiVersion: '2023-10-16' as any });
+    
+    let lineItems: any[] = [];
+    let mode: 'payment' | 'subscription' = 'payment';
+    
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    
+    if (body.type === 'premium') {
+      mode = 'subscription';
+      lineItems = [{
+        price_data: {
+          currency: 'usd',
+          product_data: {
+            name: 'landlord.hu Premium Subscription Plan',
+            description: 'Unlocks unlimited properties, Sophia AI assistant, teammate invitations, and contractor assignments.',
+          },
+          unit_amount: 200, // $2.00
+          recurring: {
+            interval: 'month'
+          }
+        },
+        quantity: 1
+      }];
+    } else {
+      const amount = body.amount || 1500;
+      const costInCents = Math.max(50, Math.round((amount / 600) * 100)); // Minimum 50 cents
+      
+      lineItems = [{
+        price_data: {
+          currency: 'usd',
+          product_data: {
+            name: `landlord.hu Credits Refill (${amount.toLocaleString()} tokens)`,
+            description: `Top-up credits for email campaigns, Sophia AI, and automated tenant notifications.`,
+          },
+          unit_amount: costInCents,
+        },
+        quantity: 1
+      }];
+    }
+    
+    try {
+      const session = await stripeInstance.checkout.sessions.create({
+        payment_method_types: ['card'],
+        line_items: lineItems,
+        mode: mode,
+        success_url: `${appUrl}/team/organization?status=success&session_id={CHECKOUT_SESSION_ID}&type=${body.type}&amount=${body.amount || 0}`,
+        cancel_url: `${appUrl}/team/organization?status=cancelled`,
+        metadata: {
+          userId: callerId,
+          type: body.type,
+          amount: body.amount || 0
+        }
+      });
+      
+      return { url: session.url };
+    } catch (err: any) {
+      throw new InternalServerErrorException(`Stripe session creation failed: ${err.message}`);
+    }
+  }
+
+  @Post('billing/verify-session')
+  async verifyCheckoutSession(@Req() req: any, @Body() body: { sessionId: string }) {
+    const db = this.db;
+    const callerId = req.user.id;
+    const orgId = req.user.organizationId;
+    
+    const stripeKey = process.env.STRIPE_SECRET_KEY || 'sk_test_51TlIGlEniOjmW1hm...';
+    const stripeInstance = new Stripe(stripeKey, { apiVersion: '2023-10-16' as any });
+    
+    try {
+      const session = await stripeInstance.checkout.sessions.retrieve(body.sessionId);
+      if (session.payment_status !== 'paid') {
+        throw new BadRequestException('Session is not completed or paid.');
+      }
+      
+      const metadata = session.metadata || {};
+      const purchaseType = metadata.type;
+      
+      // Resolve organization owner
+      let ownerId = callerId;
+      if (orgId) {
+        const orgOwner = await db.select().from(schema.users).where(and(eq(schema.users.organizationId, orgId), eq(schema.users.role, 'landlord'))).limit(1);
+        if (orgOwner.length > 0) {
+          ownerId = orgOwner[0].id;
+        }
+      }
+      const ownerUser = await db.select().from(schema.users).where(eq(schema.users.id, ownerId)).limit(1);
+      const ownerEmail = ownerUser[0]?.email;
+      if (!ownerEmail) {
+        throw new BadRequestException('Owner email not found');
+      }
+      
+      if (purchaseType === 'premium') {
+        const existingSub = await db.select().from(schema.subscriptions).where(eq(schema.subscriptions.stripeSubscriptionId, session.subscription as string)).limit(1);
+        if (existingSub.length > 0) {
+          return { success: true, message: 'Already processed' };
+        }
+        
+        const existing = await db.select().from(schema.subscriptions).where(eq(schema.subscriptions.userId, ownerId)).limit(1);
+        if (existing.length > 0) {
+          await db
+            .update(schema.subscriptions)
+            .set({
+              tier: 'premium',
+              status: 'active',
+              stripeSubscriptionId: (session.subscription as string) || 'stripe-sub-mock',
+              expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+              updatedAt: new Date()
+            })
+            .where(eq(schema.subscriptions.userId, ownerId));
+        } else {
+          await db.insert(schema.subscriptions).values({
+            id: 'sub-' + Math.random().toString(36).substring(2, 9),
+            userId: ownerId,
+            tier: 'premium',
+            status: 'active',
+            stripeSubscriptionId: (session.subscription as string) || 'stripe-sub-mock',
+            expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+          });
+        }
+      } else if (purchaseType === 'credits') {
+        const refillAmount = Number(metadata.amount || 0);
+        if (refillAmount <= 0) {
+          throw new BadRequestException('Invalid refill amount.');
+        }
+        
+        const existingTx = await db
+          .select()
+          .from(schema.creditTransactions)
+          .where(eq(schema.creditTransactions.description, `Stripe Refill: session_${body.sessionId}`))
+          .limit(1);
+        
+        if (existingTx.length > 0) {
+          return { success: true, message: 'Already processed' };
+        }
+        
+        const reserveBalance = await this.creditLedgerService.resolveBalance('RESERVE');
+        if (reserveBalance < refillAmount) {
+          await this.creditLedgerService.mintCredits(refillAmount * 10, 'Automated reserve liquidity refill');
+        }
+        
+        await this.creditLedgerService.transferCredits(
+          'RESERVE',
+          ownerEmail,
+          refillAmount,
+          'purchase',
+          'manual_adjust',
+          `Stripe Refill: session_${body.sessionId}`
+        );
+      }
+      
+      return { success: true };
+    } catch (err: any) {
+      throw new InternalServerErrorException(`Verify checkout session failed: ${err.message}`);
     }
   }
 }

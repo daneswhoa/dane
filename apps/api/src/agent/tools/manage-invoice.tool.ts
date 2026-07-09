@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import * as schema from '../../db/schema';
-import { checkToolPermission } from './permissions';
+import { getToolPermissionError } from './permissions';
 
 export interface ManageInvoiceArgs {
   invoiceId: string;
@@ -22,8 +22,9 @@ export class ManageInvoiceTool {
     const { db, userId, user } = context;
 
     // Check permissions
-    if (user && !checkToolPermission(user, 'Finance', 'Process Payments')) {
-      return { success: false, error: 'Access Denied: You do not have permission to manage/update invoices.' };
+    if (user) {
+      const permError = getToolPermissionError(user, 'Finance', 'Process Payments');
+      if (permError) return { success: false, error: permError };
     }
 
     const { invoiceId, action } = args;

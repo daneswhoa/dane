@@ -5,6 +5,7 @@ import { SessionGuard } from './auth/auth.guard';
 import { GcpTasksService } from './gcp-tasks.service';
 import { EmailService } from './email.service';
 import { DATABASE_CONNECTION } from './db/database.module';
+import { CreditLedgerService } from './agent/credit-ledger.service';
 
 @Controller('dashboard')
 export class CampaignsController {
@@ -12,6 +13,7 @@ export class CampaignsController {
     private readonly gcpTasksService: GcpTasksService,
     private readonly emailService: EmailService,
     @Inject(DATABASE_CONNECTION) private readonly db: any,
+    private readonly creditLedgerService: CreditLedgerService,
   ) {}
 
   @Get('email-templates')
@@ -27,7 +29,7 @@ export class CampaignsController {
         .where(
           or(
             eq(schema.emailTemplates.isSystem, true),
-            eq(schema.emailTemplates.organizationName, req.user.organizationName || '')
+            eq(schema.emailTemplates.organizationId, req.user.organizationId || '')
           )
         );
       if (existing.length === 0) {
@@ -130,7 +132,7 @@ export class CampaignsController {
         .limit(1);
 
       if (existing.length > 0) {
-        if (existing[0].organizationName && existing[0].organizationName !== req.user.organizationName) {
+        if (existing[0].organizationId && existing[0].organizationId !== req.user.organizationId) {
           throw new BadRequestException('Access denied. You cannot edit this template.');
         }
         await db
@@ -145,6 +147,7 @@ export class CampaignsController {
         await db.insert(schema.emailTemplates).values({
           id: templateId,
           ownerId,
+          organizationId: req.user.organizationId || null,
           organizationName: req.user.organizationName || null,
           name: body.name,
           subject: body.subject,
@@ -165,7 +168,7 @@ export class CampaignsController {
     const db = this.db;
     try {
       const existing = await db.select().from(schema.emailTemplates).where(eq(schema.emailTemplates.id, id)).limit(1);
-      if (existing.length > 0 && existing[0].organizationName && existing[0].organizationName !== req.user.organizationName) {
+      if (existing.length > 0 && existing[0].organizationId && existing[0].organizationId !== req.user.organizationId) {
         throw new BadRequestException('Access denied. You cannot delete this template.');
       }
       await db.delete(schema.emailTemplates).where(eq(schema.emailTemplates.id, id));
@@ -180,12 +183,12 @@ export class CampaignsController {
   @UseGuards(SessionGuard)
   async getCampaigns(@Req() req: any) {
     const db = this.db;
-    const callerOrg = req.user.organizationName || '';
+    const callerOrgId = req.user.organizationId || '';
     try {
       return await db
         .select()
         .from(schema.campaigns)
-        .where(eq(schema.campaigns.organizationName, callerOrg));
+        .where(eq(schema.campaigns.organizationId, callerOrgId));
     } catch (err: any) {
       throw new InternalServerErrorException(`Failed to retrieve campaigns: ${err.message}`);
     }
@@ -207,7 +210,7 @@ export class CampaignsController {
   ) {
     const db = this.db;
     const ownerId = req.user.id;
-    const callerOrg = req.user.organizationName || '';
+    const callerOrgId = req.user.organizationId || '';
 
     if (!body.title || !body.subject || !body.body || !body.audienceType) {
       throw new BadRequestException('Required fields missing.');
@@ -226,7 +229,8 @@ export class CampaignsController {
       await db.insert(schema.campaigns).values({
         id: campaignId,
         ownerId,
-        organizationName: callerOrg || null,
+        organizationId: callerOrgId || null,
+        organizationName: req.user.organizationName || null,
         title: body.title,
         subject: body.subject,
         body: body.body,
@@ -324,11 +328,12 @@ export class CampaignsController {
 
       let recipients: Array<{ email: string; name: string; propertyName?: string; amount?: string; date?: string }> = [];
 
+      const orgId = campaign.organizationId || '';
       const orgName = campaign.organizationName || '';
 
       if (campaign.audienceType === 'all') {
         // Resolve all active tenants of this landlord's organization
-        const props = await db.select().from(schema.properties).where(eq(schema.properties.organizationName, orgName));
+        const props = await db.select().from(schema.properties).where(eq(schema.properties.organizationId, orgId));
         const propIds = props.map((p: any) => p.id);
         if (propIds.length > 0) {
           const tenants = await db
@@ -393,7 +398,7 @@ export class CampaignsController {
           .from(schema.users)
           .where(
             and(
-              eq(schema.users.organizationName, orgName),
+              eq(schema.users.organizationId, orgId),
               inArray(schema.users.role, ['landlord', 'manager'])
             )
           );
@@ -414,7 +419,7 @@ export class CampaignsController {
           })
           .from(schema.invoices)
           .leftJoin(schema.properties, eq(schema.invoices.propertyId, schema.properties.id))
-          .where(and(eq(schema.invoices.organizationName, orgName), eq(schema.invoices.status, 'unpaid')));
+          .where(and(eq(schema.invoices.organizationId, orgId), eq(schema.invoices.status, 'unpaid')));
 
         recipients = unpaid.map((u: any) => ({
           email: u.email,
@@ -450,7 +455,7 @@ export class CampaignsController {
         }
       } else if (campaign.audienceType === 'lease_expiring') {
         // Resolve active tenants with leaseEnd in next 60 days
-        const props = await db.select().from(schema.properties).where(eq(schema.properties.organizationName, orgName));
+        const props = await db.select().from(schema.properties).where(eq(schema.properties.organizationId, orgId));
         const propIds = props.map((p: any) => p.id);
         if (propIds.length > 0) {
           const today = new Date();
@@ -488,6 +493,44 @@ export class CampaignsController {
               propertyName: t.propertyName,
               date: t.leaseEnd ? new Date(t.leaseEnd).toLocaleDateString() : 'N/A',
             }));
+        }
+      }
+
+      // Charge credits before dispatching
+      const configRecord = await db
+        .select()
+        .from(schema.systemConfigs)
+        .where(eq(schema.systemConfigs.key, 'price_email_broadcast'))
+        .limit(1);
+      const pricePerEmail = configRecord.length > 0 ? Number(configRecord[0].value) : 2;
+      const totalCost = recipients.length * pricePerEmail;
+
+      if (totalCost > 0) {
+        const ownerUser = await db
+          .select()
+          .from(schema.users)
+          .where(eq(schema.users.id, ownerId))
+          .limit(1);
+        const ownerUsername = ownerUser[0]?.email;
+        
+        if (ownerUsername) {
+          try {
+            await this.creditLedgerService.transferCredits(
+              ownerUsername,
+              'RESERVE_SPENT',
+              totalCost,
+              'spend',
+              'email_broadcast',
+              `Broadcast campaign "${campaign.title}" to ${recipients.length} recipients`
+            );
+          } catch (ledgerErr: any) {
+            await db
+              .update(schema.campaigns)
+              .set({ status: 'failed' })
+              .where(eq(schema.campaigns.id, campaignId));
+            console.error(`Campaign ${campaignId} aborted: ${ledgerErr.message}`);
+            return;
+          }
         }
       }
 
@@ -535,19 +578,21 @@ export class CampaignsController {
   async getAutomations(@Req() req: any) {
     const db = this.db;
     const ownerId = req.user.id;
-    const callerOrg = req.user.organizationName || '';
+    const callerOrgId = req.user.organizationId || '';
+    const callerOrgName = req.user.organizationName || '';
     try {
       const existing = await db
         .select()
         .from(schema.automations)
-        .where(eq(schema.automations.organizationName, callerOrg));
+        .where(eq(schema.automations.organizationId, callerOrgId));
 
-      if (existing.length === 0 && callerOrg) {
+      if (existing.length === 0 && callerOrgId) {
         const defaults = [
           {
-            id: `rent-reminder-${callerOrg}`,
+            id: `rent-reminder-${callerOrgId}`,
             ownerId: ownerId,
-            organizationName: callerOrg,
+            organizationId: callerOrgId,
+            organizationName: callerOrgName,
             name: 'Rent Reminder',
             description: 'Notify tenants regarding their upcoming rent invoice before the due date.',
             triggerEvent: 'Invoice Due Date',
@@ -558,9 +603,10 @@ export class CampaignsController {
             channel: 'Email',
           },
           {
-            id: `late-rent-${callerOrg}`,
+            id: `late-rent-${callerOrgId}`,
             ownerId: ownerId,
-            organizationName: callerOrg,
+            organizationId: callerOrgId,
+            organizationName: callerOrgName,
             name: 'Late Rent Notice',
             description: 'Send alerts to tenants when an invoice status remains unpaid after the due date.',
             triggerEvent: 'Invoice Due Date',
@@ -571,9 +617,10 @@ export class CampaignsController {
             channel: 'Email',
           },
           {
-            id: `lease-expiry-${callerOrg}`,
+            id: `lease-expiry-${callerOrgId}`,
             ownerId: ownerId,
-            organizationName: callerOrg,
+            organizationId: callerOrgId,
+            organizationName: callerOrgName,
             name: 'Lease Renewal Prompt',
             description: 'Invite tenants to discuss renewal options when their lease contract is ending.',
             triggerEvent: 'Lease End Date',
@@ -584,9 +631,10 @@ export class CampaignsController {
             channel: 'Email',
           },
           {
-            id: `ticket-update-${callerOrg}`,
+            id: `ticket-update-${callerOrgId}`,
             ownerId: ownerId,
-            organizationName: callerOrg,
+            organizationId: callerOrgId,
+            organizationName: callerOrgName,
             name: 'Maintenance Progress Sync',
             description: 'Alert tenants and contractors as soon as a maintenance ticket status changes.',
             triggerEvent: 'Maintenance Ticket Update',
@@ -597,9 +645,10 @@ export class CampaignsController {
             channel: 'Both',
           },
           {
-            id: `welcome-${callerOrg}`,
+            id: `welcome-${callerOrgId}`,
             ownerId: ownerId,
-            organizationName: callerOrg,
+            organizationId: callerOrgId,
+            organizationName: callerOrgName,
             name: 'Move-In Welcome Sequence',
             description: 'Send onboarding guides, keys collection details, and portal links on their lease start date.',
             triggerEvent: 'Lease Start Date',
@@ -640,12 +689,12 @@ export class CampaignsController {
     },
   ) {
     const db = this.db;
-    const callerOrg = req.user.organizationName || '';
+    const callerOrgId = req.user.organizationId || '';
     try {
       const existing = await db
         .select()
         .from(schema.automations)
-        .where(and(eq(schema.automations.id, id), eq(schema.automations.organizationName, callerOrg)))
+        .where(and(eq(schema.automations.id, id), eq(schema.automations.organizationId, callerOrgId)))
         .limit(1);
 
       if (existing.length === 0) {

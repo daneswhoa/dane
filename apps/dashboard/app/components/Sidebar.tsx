@@ -25,7 +25,9 @@ import {
   Cpu,
   ClipboardList,
   MessageCircle,
-  Megaphone
+  Megaphone,
+  Globe,
+  HelpCircle
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -309,6 +311,7 @@ export default function Sidebar({
             badge: metrics?.properties ? String(metrics.properties.count) : undefined,
             dots: metrics?.properties?.hasPending ? ['yellow'] : undefined
           })}
+          {renderLink('syndication', 'Syndication', Globe)}
           {renderLink('tenants', 'Tenants', Users, { 
             badge: metrics?.tenants ? String(metrics.tenants.count) : undefined 
           })}
@@ -460,6 +463,7 @@ export default function Sidebar({
           {renderLink('analytics', 'Analytics', BarChart3)}
           {renderLink('security', 'Security & Audit', ShieldCheck)}
           {renderLink('team', userOrganizationName || 'Organization', Building2)}
+          {renderLink('support', 'Support & Help', HelpCircle)}
         </nav>
  
         {/* User Profile (Bottom) */}

@@ -368,11 +368,32 @@ function RegisterWizardContent() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, role: selectedRole })
       });
-      if (!res.ok) throw new Error('Failed to save your role selection.');
+      if (!res.ok) {
+        let detailedError = '';
+        try {
+          const errData = await res.json();
+          detailedError = errData.message || JSON.stringify(errData);
+        } catch (e) {
+          try {
+            detailedError = await res.text();
+          } catch (textErr) {
+            detailedError = `HTTP Status: ${res.status} ${res.statusText}`;
+          }
+        }
+        throw new Error(detailedError || 'Failed to save your role selection.');
+      }
       setIsLoading(false);
       if (selectedRole === 'manager') navigateStep(5);
       else triggerFinalRedirection(selectedRole);
-    } catch (err: any) { setIsLoading(false); setErrorMessage(err.message); }
+    } catch (err: any) {
+      setIsLoading(false);
+      setErrorMessage('Failed to save your role selection.');
+      setErrorModal({
+        show: true,
+        title: "Role selection failed",
+        message: err.message || 'No detailed error message received from the server.'
+      });
+    }
   };
 
   const handleCheckInvite = async () => {
@@ -607,6 +628,7 @@ function RegisterWizardContent() {
                 onBack={() => navigateStep(2)} onContinue={handleContinueFromStep3}
                 onResend={handleResendOtp}
                 activeClass={getStepClass(3)}
+                isLoading={isLoading}
               />
               <Step4RoleSelection
                 selectedRole={selectedRole} setSelectedRole={setSelectedRole}

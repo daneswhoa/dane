@@ -1,22 +1,24 @@
 import { Controller, Get, Post, Body, Param, Req, InternalServerErrorException, UseGuards, BadRequestException, Inject, UseInterceptors, UploadedFile } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { eq, desc, and } from 'drizzle-orm';
+import { eq, desc, and, sql } from 'drizzle-orm';
 import * as schema from './db/schema';
 import { SessionGuard } from './auth/auth.guard';
 import { DATABASE_CONNECTION } from './db/database.module';
+import { R2Service } from './r2/r2.service';
 
 @Controller('dashboard')
 @UseGuards(SessionGuard)
 export class PropertiesController {
   constructor(
-    @Inject(DATABASE_CONNECTION) private readonly db: any
+    @Inject(DATABASE_CONNECTION) private readonly db: any,
+    private readonly r2Service: R2Service
   ) {}
 
   @Get('properties')
   async getProperties(@Req() req: any) {
     const callerId = req.user.id;
     const callerRole = req.user.role;
-    const callerOrg = req.user.organizationName || '';
+    const callerOrgId = req.user.organizationId || '';
 
     if (callerRole === 'tenant') {
       throw new BadRequestException('Access denied. Tenants cannot view property lists.');
@@ -24,11 +26,11 @@ export class PropertiesController {
 
     try {
       let list: any[] = [];
-      if (callerOrg) {
+      if (callerOrgId) {
         list = await this.db
           .select()
           .from(schema.properties)
-          .where(eq(schema.properties.organizationName, callerOrg))
+          .where(eq(schema.properties.organizationId, callerOrgId))
           .orderBy(desc(schema.properties.createdAt));
       }
 
@@ -38,7 +40,7 @@ export class PropertiesController {
       }
 
       let allUnits: any[] = [];
-      if (callerOrg) {
+      if (callerOrgId) {
         allUnits = await this.db
           .select({
             propertyId: schema.units.propertyId,
@@ -47,7 +49,7 @@ export class PropertiesController {
           })
           .from(schema.units)
           .innerJoin(schema.properties, eq(schema.units.propertyId, schema.properties.id))
-          .where(eq(schema.properties.organizationName, callerOrg));
+          .where(eq(schema.properties.organizationId, callerOrgId));
       }
 
       const unitsByProp = allUnits.reduce((acc: any, u: any) => {
@@ -63,17 +65,21 @@ export class PropertiesController {
         const occupiedCount = pUnits.filter((u: any) => u.status === 'occupied').length;
         const occupancyRate = pUnits.length > 0 ? Math.round((occupiedCount / pUnits.length) * 100) : (prop.unitsCount > 0 ? 0 : 100);
 
+        const currency = prop.currency || 'USD';
+        const currencySymbol = currency === 'EUR' ? '€' : currency === 'KES' ? 'KES ' : '$';
+
         return {
           id: prop.id,
           name: prop.name,
           address: prop.address || 'No Address',
           type: 'Multi-Family',
-          avgRent: `$${avgRent.toLocaleString()}/mo Avg`,
+          avgRent: `${currencySymbol}${avgRent.toLocaleString()}/mo Avg`,
           image: prop.photoUrl || (prop.unitsCount > 1 ? '/default_apartment.png' : '/default_house.png'),
           units: prop.unitsCount || 0,
           occupancy: `${occupancyRate}%`,
           tickets: 0,
           status: prop.status || 'active',
+          currency,
         };
       });
     } catch (err: any) {
@@ -96,34 +102,14 @@ export class PropertiesController {
       throw new BadRequestException('No file provided');
     }
 
-    const bucketName = process.env.GCS_BUCKET_NAME || 'landlordnl-assets';
     let photoUrl = '';
 
     try {
-      const { Storage } = require('@google-cloud/storage');
-      let storage;
-      if (process.env.GCP_CREDENTIALS) {
-        try {
-          storage = new Storage({ credentials: JSON.parse(process.env.GCP_CREDENTIALS) });
-        } catch (e) {
-          console.error('Failed to parse GCS credentials from GCP_CREDENTIALS env:', e);
-          storage = new Storage();
-        }
-      } else {
-        storage = new Storage();
-      }
-      const bucket = storage.bucket(bucketName);
-      const fileName = `properties/${req.user.id}-${Date.now()}-${file.originalname}`;
-      const blob = bucket.file(fileName);
-      
-      await blob.save(file.buffer, {
-        contentType: file.mimetype,
-        resumable: false,
-      });
-      
-      photoUrl = `https://storage.googleapis.com/${bucketName}/${fileName}`;
+      const safeName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
+      const fileName = `properties/${req.user.id}-${Date.now()}-${safeName}`;
+      photoUrl = await this.r2Service.uploadFile(file.buffer, fileName, file.mimetype);
     } catch (error) {
-      console.log('GCS Upload Error (falling back to local storage):', error);
+      console.log('R2 Upload Error (falling back to local storage):', error);
       try {
         const fs = require('fs');
         const path = require('path');
@@ -146,7 +132,7 @@ export class PropertiesController {
         console.log(`[Photo Upload Fallback] Generated local photoUrl: ${photoUrl}`);
       } catch (fsErr) {
         console.error('Failed to write file locally:', fsErr);
-        throw new InternalServerErrorException('Photo upload failed on both cloud and local fallback.');
+        throw new InternalServerErrorException('Photo upload failed on both Cloudflare R2 and local fallback.');
       }
     }
 
@@ -154,7 +140,7 @@ export class PropertiesController {
   }
 
   @Post('properties')
-  async createProperty(@Req() req: any, @Body() body: { name: string, address: string, photoUrl?: string, unitsCount?: number }) {
+  async createProperty(@Req() req: any, @Body() body: { name: string, address: string, photoUrl?: string, unitsCount?: number, currency?: string }) {
     const callerId = req.user.id;
     const callerRole = req.user.role;
 
@@ -167,22 +153,78 @@ export class PropertiesController {
     }
 
     try {
+      // 1. Check if organization has active premium subscription
+      let isPremium = false;
+      if (req.user.organizationId) {
+        const orgSubs = await this.db
+          .select()
+          .from(schema.subscriptions)
+          .innerJoin(schema.users, eq(schema.subscriptions.userId, schema.users.id))
+          .where(
+            and(
+              eq(schema.users.organizationId, req.user.organizationId),
+              eq(schema.subscriptions.tier, 'premium'),
+              eq(schema.subscriptions.status, 'active')
+            )
+          )
+          .limit(1);
+        isPremium = orgSubs.length > 0;
+      } else {
+        const userSubs = await this.db
+          .select()
+          .from(schema.subscriptions)
+          .where(
+            and(
+              eq(schema.subscriptions.userId, callerId),
+              eq(schema.subscriptions.tier, 'premium'),
+              eq(schema.subscriptions.status, 'active')
+            )
+          )
+          .limit(1);
+        isPremium = userSubs.length > 0;
+      }
+
+      // 2. Count existing properties if not premium
+      if (!isPremium) {
+        let propertyCount = 0;
+        if (req.user.organizationId) {
+          const countRes = await this.db
+            .select({ count: sql<number>`count(*)` })
+            .from(schema.properties)
+            .where(eq(schema.properties.organizationId, req.user.organizationId));
+          propertyCount = Number(countRes[0]?.count || 0);
+        } else {
+          const countRes = await this.db
+            .select({ count: sql<number>`count(*)` })
+            .from(schema.properties)
+            .where(eq(schema.properties.ownerId, callerId));
+          propertyCount = Number(countRes[0]?.count || 0);
+        }
+
+        if (propertyCount >= 3) {
+          throw new BadRequestException('Access Denied: You have reached the limit of 3 properties on the free plan. Please upgrade to a Premium subscription ($2/mo) in the Organization Settings tab to add more properties.');
+        }
+      }
+
       const propertyId = 'prop-' + Math.random().toString(36).substring(2, 9);
       await this.db.insert(schema.properties).values({
         id: propertyId,
         name: body.name,
         address: body.address,
         ownerId: callerId,
+        organizationId: req.user.organizationId || null,
         organizationName: req.user.organizationName || null,
         unitsCount: body.unitsCount || 1,
         status: 'pending',
         photoUrl: body.photoUrl || null,
+        currency: body.currency || 'USD',
       });
 
       // Insert audit log
       await this.db.insert(schema.auditLogs).values({
         id: 'audit-' + Math.random().toString(36).substring(2, 9),
         ownerId: callerId,
+        organizationId: req.user.organizationId || null,
         organizationName: req.user.organizationName || null,
         actorName: req.user.name || 'Owner',
         actorEmail: req.user.email,
@@ -232,6 +274,15 @@ export class PropertiesController {
           tenantId: schema.units.tenantId,
           tenantName: schema.users.name,
           tenantEmail: schema.users.email,
+          floor: schema.units.floor,
+          unitType: schema.units.unitType,
+          arrears: schema.units.arrears,
+          deposit: schema.units.deposit,
+          moveInFees: schema.units.moveInFees,
+          recurringFees: schema.units.recurringFees,
+          moveInFeeDetails: schema.units.moveInFeeDetails,
+          recurringFeeDetails: schema.units.recurringFeeDetails,
+          isListed: schema.units.isListed,
         })
         .from(schema.units)
         .leftJoin(schema.users, eq(schema.units.tenantId, schema.users.id))
@@ -392,6 +443,7 @@ export class PropertiesController {
             propertyId: id,
             unitId: unitId,
             ownerId: callerId,
+            organizationId: req.user.organizationId || null,
             organizationName: req.user.organizationName || null,
             amount: totalInvoiceAmount,
             type: 'Rent & Initial Fees',
@@ -412,6 +464,7 @@ export class PropertiesController {
               propertyId: id,
               unitId: unitId,
               ownerId: callerId,
+              organizationId: req.user.organizationId || null,
               organizationName: req.user.organizationName || null,
               amount: Number(unit.arrears),
               type: 'Arrears',
@@ -468,6 +521,7 @@ export class PropertiesController {
       await this.db.insert(schema.auditLogs).values({
         id: 'audit-' + Math.random().toString(36).substring(2, 9),
         ownerId: callerId,
+        organizationId: req.user.organizationId || null,
         organizationName: req.user.organizationName || null,
         actorName: req.user.name || 'Owner',
         actorEmail: req.user.email,
@@ -491,7 +545,7 @@ export class PropertiesController {
   async getUnits(@Req() req: any) {
     const callerId = req.user.id;
     const callerRole = req.user.role;
-    const callerOrg = req.user.organizationName || '';
+    const callerOrgId = req.user.organizationId || '';
 
     if (callerRole === 'tenant') {
       throw new BadRequestException('Access denied. Tenants cannot view units.');
@@ -499,7 +553,7 @@ export class PropertiesController {
 
     try {
       let list: any[] = [];
-      if (callerOrg) {
+      if (callerOrgId) {
         list = await this.db
           .select({
             id: schema.units.id,
@@ -514,7 +568,7 @@ export class PropertiesController {
           .from(schema.units)
           .innerJoin(schema.properties, eq(schema.units.propertyId, schema.properties.id))
           .leftJoin(schema.users, eq(schema.units.tenantId, schema.users.id))
-          .where(eq(schema.properties.organizationName, callerOrg));
+          .where(eq(schema.properties.organizationId, callerOrgId));
       }
 
       if (req.user.permissions && req.user.allowedProperties && req.user.allowedProperties !== 'all') {
@@ -532,7 +586,7 @@ export class PropertiesController {
   async updateProperty(
     @Req() req: any,
     @Param('id') id: string,
-    @Body() body: { name?: string; address?: string; photoUrl?: string }
+    @Body() body: { name?: string; address?: string; photoUrl?: string; currency?: string }
   ) {
     const callerId = req.user.id;
     const callerRole = req.user.role;
@@ -554,7 +608,7 @@ export class PropertiesController {
 
       const property = propList[0];
       
-      if (property.organizationName !== req.user.organizationName) {
+      if (property.organizationId !== req.user.organizationId) {
         throw new BadRequestException('Access denied. You do not manage this property.');
       }
 
@@ -562,6 +616,7 @@ export class PropertiesController {
       if (body.name !== undefined) updateData.name = body.name;
       if (body.address !== undefined) updateData.address = body.address;
       if (body.photoUrl !== undefined) updateData.photoUrl = body.photoUrl;
+      if (body.currency !== undefined) updateData.currency = body.currency;
 
       if (Object.keys(updateData).length > 0) {
         await this.db
@@ -572,6 +627,7 @@ export class PropertiesController {
         await this.db.insert(schema.auditLogs).values({
           id: 'audit-' + Math.random().toString(36).substring(2, 9),
           ownerId: callerId,
+          organizationId: req.user.organizationId || null,
           organizationName: req.user.organizationName || null,
           actorName: req.user.name || 'Owner',
           actorEmail: req.user.email,
@@ -623,7 +679,7 @@ export class PropertiesController {
 
       const property = propList[0];
       
-      if (property.organizationName !== req.user.organizationName) {
+      if (property.organizationId !== req.user.organizationId) {
         throw new BadRequestException('Access denied. You do not manage this property.');
       }
 
@@ -661,6 +717,7 @@ export class PropertiesController {
         await tx.insert(schema.auditLogs).values({
           id: 'audit-' + Math.random().toString(36).substring(2, 9),
           ownerId: callerId,
+          organizationId: req.user.organizationId || null,
           organizationName: req.user.organizationName || null,
           actorName: req.user.name || 'Owner',
           actorEmail: req.user.email,
@@ -706,6 +763,7 @@ export class PropertiesController {
           tenantId: schema.units.tenantId,
           propertyName: schema.properties.name,
           ownerId: schema.properties.ownerId,
+          organizationId: schema.properties.organizationId,
           organizationName: schema.properties.organizationName,
         })
         .from(schema.units)
@@ -719,7 +777,7 @@ export class PropertiesController {
 
       const unit = unitList[0];
 
-      if (unit.organizationName !== req.user.organizationName) {
+      if (unit.organizationId !== req.user.organizationId) {
         throw new BadRequestException('Access denied. You do not manage the property of this unit.');
       }
 
@@ -742,6 +800,7 @@ export class PropertiesController {
       await this.db.insert(schema.auditLogs).values({
         id: 'audit-' + Math.random().toString(36).substring(2, 9),
         ownerId: callerId,
+        organizationId: req.user.organizationId || null,
         organizationName: req.user.organizationName || null,
         actorName: req.user.name || 'Owner',
         actorEmail: req.user.email,
@@ -759,6 +818,68 @@ export class PropertiesController {
     } catch (err: any) {
       if (err instanceof BadRequestException) throw err;
       throw new InternalServerErrorException(`Failed to update unit: ${err.message}`);
+    }
+  }
+
+  @Get('units/:id/details')
+  async getUnitDetails(@Req() req: any, @Param('id') id: string) {
+    const callerRole = req.user.role;
+    if (callerRole === 'tenant') {
+      throw new BadRequestException('Access denied.');
+    }
+
+    try {
+      // 1. Fetch lease history
+      const leasesHistory = await this.db
+        .select({
+          id: schema.leases.id,
+          startDate: schema.leases.startDate,
+          endDate: schema.leases.endDate,
+          status: schema.leases.status,
+          tenantName: schema.users.name,
+          tenantEmail: schema.users.email,
+        })
+        .from(schema.leases)
+        .innerJoin(schema.users, eq(schema.leases.tenantId, schema.users.id))
+        .where(eq(schema.leases.unitId, id))
+        .orderBy(desc(schema.leases.startDate));
+
+      // 2. Fetch recent maintenance tickets
+      const recentTickets = await this.db
+        .select({
+          id: schema.tickets.id,
+          title: schema.tickets.title,
+          description: schema.tickets.description,
+          urgency: schema.tickets.urgency,
+          status: schema.tickets.status,
+          createdAt: schema.tickets.createdAt,
+        })
+        .from(schema.tickets)
+        .where(eq(schema.tickets.unitId, id))
+        .orderBy(desc(schema.tickets.createdAt));
+
+      // 3. Fetch recent invoices
+      const recentInvoices = await this.db
+        .select({
+          id: schema.invoices.id,
+          invoiceNumber: schema.invoices.invoiceNumber,
+          type: schema.invoices.type,
+          amount: schema.invoices.amount,
+          amountPaid: schema.invoices.amountPaid,
+          status: schema.invoices.status,
+          dueDate: schema.invoices.dueDate,
+        })
+        .from(schema.invoices)
+        .where(eq(schema.invoices.unitId, id))
+        .orderBy(desc(schema.invoices.createdAt));
+
+      return {
+        leases: leasesHistory,
+        tickets: recentTickets,
+        invoices: recentInvoices,
+      };
+    } catch (err: any) {
+      throw new InternalServerErrorException(`Failed to retrieve unit details: ${err.message}`);
     }
   }
 }

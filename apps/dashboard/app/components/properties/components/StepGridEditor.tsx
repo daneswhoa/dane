@@ -35,6 +35,16 @@ interface StepGridEditorProps {
   onAddManualUnit: () => void;
   onRemoveUnit: (index: number) => void;
   onUpdateUnitRow: (index: number, key: keyof UnitRow, value: any) => void;
+  currency?: string;
+}
+
+function getCurrencySymbol(currency?: string) {
+  switch (currency?.toUpperCase()) {
+    case 'KES': return 'KES ';
+    case 'EUR': return '€';
+    case 'USD': return '$';
+    default: return '$';
+  }
 }
 
 export function StepGridEditor({
@@ -43,7 +53,9 @@ export function StepGridEditor({
   onAddManualUnit,
   onRemoveUnit,
   onUpdateUnitRow,
+  currency,
 }: StepGridEditorProps) {
+  const symbol = getCurrencySymbol(currency);
   const hasHighArrears = units.some((u) => Number(u.arrears) > 1000);
 
   // Financial aggregates
@@ -213,7 +225,7 @@ export function StepGridEditor({
           </div>
           <div>
             <span className="text-[9px] uppercase tracking-wider text-paper-400 font-bold block">Monthly Rent</span>
-            <span className="text-sm font-bold text-paper-900 dark:text-white">${totalMonthlyRent.toLocaleString()}</span>
+            <span className="text-sm font-bold text-paper-900 dark:text-white">{symbol}{totalMonthlyRent.toLocaleString()}</span>
           </div>
         </div>
 
@@ -224,7 +236,7 @@ export function StepGridEditor({
           <div>
             <span className="text-[9px] uppercase tracking-wider text-paper-400 font-bold block">Total Arrears</span>
             <span className={`text-sm font-bold ${totalArrears > 0 ? 'text-coral-500' : 'text-paper-900 dark:text-white'}`}>
-              ${totalArrears.toLocaleString()}
+              {symbol}{totalArrears.toLocaleString()}
             </span>
           </div>
         </div>
@@ -239,14 +251,14 @@ export function StepGridEditor({
                 <th className="px-3 py-2.5 w-24">Unit ID (Req)</th>
                 <th className="px-3 py-2.5 w-32">Unit Name</th>
                 <th className="px-3 py-2.5 w-16">Floor</th>
-                <th className="px-3 py-2.5 w-20">Rent ($)</th>
-                <th className="px-3 py-2.5 w-20">Deposit ($)</th>
-                <th className="px-3 py-2.5 w-24">Move-in Fees ($)</th>
-                <th className="px-3 py-2.5 w-24">Recurring ($)</th>
+                <th className="px-3 py-2.5 w-20">Rent ({symbol.trim()})</th>
+                <th className="px-3 py-2.5 w-20">Deposit ({symbol.trim()})</th>
+                <th className="px-3 py-2.5 w-24">Move-in Fees ({symbol.trim()})</th>
+                <th className="px-3 py-2.5 w-24">Recurring ({symbol.trim()})</th>
                 <th className="px-3 py-2.5 w-36">Tenant Name</th>
                 <th className="px-3 py-2.5 w-40">Tenant Email</th>
                 <th className="px-3 py-2.5 w-28">Move-in Date</th>
-                <th className="px-3 py-2.5 w-20">Arrears ($)</th>
+                <th className="px-3 py-2.5 w-20">Arrears ({symbol.trim()})</th>
                 <th className="px-3 py-2.5 w-24 text-center">Actions</th>
               </tr>
             </thead>
@@ -387,7 +399,7 @@ export function StepGridEditor({
           <AlertTriangle className="w-4.5 h-4.5 flex-shrink-0 mt-0.5" />
           <div className="text-[10px] leading-relaxed">
             <span className="font-semibold block mb-0.5">High Arrears Warning:</span> Some imported tenants have balances exceeding
-            $1,000. These values will sync directly into the ledger immediately upon confirmation.
+            {symbol}1,000. These values will sync directly into the ledger immediately upon confirmation.
           </div>
         </div>
       )}
@@ -607,7 +619,7 @@ export function StepGridEditor({
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-[10px] font-bold text-paper-400 block mb-1">Monthly Target Rent ($)</label>
+                      <label className="text-[10px] font-bold text-paper-400 block mb-1">Monthly Target Rent ({symbol.trim()})</label>
                       <input 
                         type="text" 
                         value={localUnit.rent}
@@ -616,7 +628,7 @@ export function StepGridEditor({
                       />
                     </div>
                     <div>
-                      <label className="text-[10px] font-bold text-paper-400 block mb-1">Active Arrears Balance ($)</label>
+                      <label className="text-[10px] font-bold text-paper-400 block mb-1">Active Arrears Balance ({symbol.trim()})</label>
                       <input 
                         type="text" 
                         value={localUnit.arrears}
@@ -642,7 +654,7 @@ export function StepGridEditor({
                       {depMult === 'custom' && (
                         <input
                           type="text"
-                          placeholder="Amount ($)"
+                          placeholder={`Amount (${symbol.trim()})`}
                           value={customDepVal}
                           onChange={(e) => setCustomDepVal(e.target.value)}
                           className="bg-white dark:bg-ink-950 border border-paper-200 dark:border-ink-700 rounded px-2.5 py-1.5 text-xs text-paper-900 dark:text-white"
@@ -676,7 +688,7 @@ export function StepGridEditor({
                           />
                           <input 
                             type="text" 
-                            placeholder="Amount ($)"
+                            placeholder={`Amount (${symbol.trim()})`}
                             value={item.amount}
                             onChange={(e) => updateMoveInFee(idx, 'amount', e.target.value)}
                             className="w-20 bg-white dark:bg-ink-950 border border-paper-200 dark:border-ink-700 rounded px-2 py-1 text-xs text-paper-900 dark:text-white text-right"
@@ -718,7 +730,7 @@ export function StepGridEditor({
                           />
                           <input 
                             type="text" 
-                            placeholder="Amount ($)"
+                            placeholder={`Amount (${symbol.trim()})`}
                             value={item.amount}
                             onChange={(e) => updateRecurringFee(idx, 'amount', e.target.value)}
                             className="w-20 bg-white dark:bg-ink-950 border border-paper-200 dark:border-ink-700 rounded px-2 py-1 text-xs text-paper-900 dark:text-white text-right"

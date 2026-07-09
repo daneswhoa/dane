@@ -34,6 +34,7 @@ interface OnboardPayload {
   propertyAddress: string;
   photoUrl?: string;
   units: UnitOnboard[];
+  currency?: string;
 }
 
 @Controller('dashboard')
@@ -78,19 +79,19 @@ export class FinanceController {
           .orderBy(desc(schema.invoices.createdAt));
       } else {
         // Managers see invoices for their organization's properties
-        const callerOrg = req.user.organizationName || '';
+        const callerOrgId = req.user.organizationId || '';
         if (tenantId) {
           list = await baseQuery
             .where(
               and(
                 eq(schema.invoices.tenantId, tenantId),
-                eq(schema.properties.organizationName, callerOrg)
+                eq(schema.properties.organizationId, callerOrgId)
               )
             )
             .orderBy(desc(schema.invoices.createdAt));
         } else {
           list = await baseQuery
-            .where(eq(schema.properties.organizationName, callerOrg))
+            .where(eq(schema.properties.organizationId, callerOrgId))
             .orderBy(desc(schema.invoices.createdAt));
         }
       }
@@ -117,11 +118,11 @@ export class FinanceController {
   @Get('billing-properties')
   async getProperties(@Req() req: any) {
     const db = this.db;
-    const callerOrg = req.user.organizationName || '';
+    const callerOrgId = req.user.organizationId || '';
     try {
       let props: any[] = [];
-      if (callerOrg) {
-        props = await db.select().from(schema.properties).where(eq(schema.properties.organizationName, callerOrg));
+      if (callerOrgId) {
+        props = await db.select().from(schema.properties).where(eq(schema.properties.organizationId, callerOrgId));
       }
       const propIds = props.map((p: any) => p.id);
       let units: any[] = [];
@@ -186,6 +187,7 @@ export class FinanceController {
         unitId: payload.unitId || null,
         propertyId: payload.propertyId,
         ownerId: callerId,
+        organizationId: req.user.organizationId || null,
         organizationName: req.user.organizationName || null,
         amount: Number(payload.amount),
         description: payload.description || `Custom ${payload.type || 'Fee'} Invoice`,
@@ -377,7 +379,7 @@ export class FinanceController {
         .where(
           and(
             inArray(schema.invoices.status, ['PAID', 'paid']),
-            eq(schema.invoices.organizationName, req.user.organizationName || '')
+            eq(schema.invoices.organizationId, req.user.organizationId || '')
           )
         );
 
@@ -390,7 +392,7 @@ export class FinanceController {
         .where(
           and(
             inArray(schema.tickets.status, ['completed', 'COMPLETED']),
-            eq(schema.tickets.organizationName, req.user.organizationName || '')
+            eq(schema.tickets.organizationId, req.user.organizationId || '')
           )
         );
 
@@ -435,7 +437,7 @@ export class FinanceController {
         .where(
           and(
             inArray(schema.invoices.status, ['PAID', 'paid']),
-            eq(schema.invoices.organizationName, req.user.organizationName || '')
+            eq(schema.invoices.organizationId, req.user.organizationId || '')
           )
         );
  
@@ -456,7 +458,7 @@ export class FinanceController {
         .where(
           and(
             inArray(schema.tickets.status, ['completed', 'COMPLETED']),
-            eq(schema.tickets.organizationName, req.user.organizationName || '')
+            eq(schema.tickets.organizationId, req.user.organizationId || '')
           )
         );
 
@@ -737,7 +739,7 @@ export class FinanceController {
       if (callerRole === 'tenant' && inv.tenantId !== callerId) {
         throw new BadRequestException('Access denied. You cannot pay other users\' invoices.');
       }
-      if ((callerRole === 'manager' || callerRole === 'landlord') && prop?.organizationName !== req.user.organizationName) {
+      if ((callerRole === 'manager' || callerRole === 'landlord') && prop?.organizationId !== req.user.organizationId) {
         throw new BadRequestException('Access denied. You cannot pay invoices of other portfolios.');
       }
 
@@ -845,6 +847,7 @@ export class FinanceController {
         unitsCount: payload.units.length,
         status: 'active',
         photoUrl: payload.photoUrl || null,
+        currency: payload.currency || 'USD',
       });
 
       for (const unit of payload.units) {
@@ -985,7 +988,7 @@ export class FinanceController {
       if (callerRole === 'tenant' && invoice.tenantId !== callerId) {
         throw new BadRequestException('Access denied. You cannot generate a payment intent for another user\'s invoice.');
       }
-      if ((callerRole === 'manager' || callerRole === 'landlord') && prop?.organizationName !== req.user.organizationName) {
+      if ((callerRole === 'manager' || callerRole === 'landlord') && prop?.organizationId !== req.user.organizationId) {
         throw new BadRequestException('Access denied. You cannot generate a payment intent for an invoice outside your portfolio.');
       }
 
@@ -1071,7 +1074,7 @@ export class FinanceController {
       if (callerRole === 'tenant' && invoice.tenantId !== callerId) {
         throw new BadRequestException('Access denied. You cannot confirm payment for another user\'s invoice.');
       }
-      if ((callerRole === 'manager' || callerRole === 'landlord') && prop?.organizationName !== req.user.organizationName) {
+      if ((callerRole === 'manager' || callerRole === 'landlord') && prop?.organizationId !== req.user.organizationId) {
         throw new BadRequestException('Access denied. You cannot confirm payment for an invoice outside your portfolio.');
       }
 
@@ -1208,10 +1211,10 @@ export class FinanceController {
   async getSidebarMetrics(@Req() req: any) {
     const db = this.db;
     const callerId = req.user.id;
-    const callerOrg = req.user.organizationName || '';
+    const callerOrgId = req.user.organizationId || '';
     try {
       // 1. Properties
-      const props = await db.select().from(schema.properties).where(eq(schema.properties.organizationName, callerOrg));
+      const props = await db.select().from(schema.properties).where(eq(schema.properties.organizationId, callerOrgId));
       const totalProperties = props.length;
       const hasPendingProperties = props.some((p: any) => p.status === 'pending');
 
@@ -1220,11 +1223,11 @@ export class FinanceController {
         .select({ count: sql<number>`count(distinct ${schema.units.tenantId})` })
         .from(schema.units)
         .innerJoin(schema.properties, eq(schema.units.propertyId, schema.properties.id))
-        .where(eq(schema.properties.organizationName, callerOrg));
+        .where(eq(schema.properties.organizationId, callerOrgId));
       const totalTenants = Number(tenantCountRes[0]?.count || 0);
 
       // 3. Invoices
-      const invs = await db.select().from(schema.invoices).where(eq(schema.invoices.organizationName, callerOrg));
+      const invs = await db.select().from(schema.invoices).where(eq(schema.invoices.organizationId, callerOrgId));
       const totalInvoices = invs.length;
       const hasOverdueInvoices = invs.some((i: any) => {
         const isUnpaid = i.status && i.status.toLowerCase() === 'unpaid';
@@ -1234,7 +1237,7 @@ export class FinanceController {
       });
 
       // 4. Maintenance
-      const tkts = await db.select().from(schema.tickets).where(eq(schema.tickets.organizationName, callerOrg));
+      const tkts = await db.select().from(schema.tickets).where(eq(schema.tickets.organizationId, callerOrgId));
       // "total maintenance request that arent completed": status is not 'completed' AND status is not 'paid'
       const uncompletedTickets = tkts.filter((t: any) => t.status !== 'completed' && t.status !== 'paid').length;
       // "a yellow dot if any non reviewed": status is 'open'

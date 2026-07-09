@@ -95,10 +95,8 @@ export class AgentMemoryService {
    * Saves the entire list of active messages for a user's thread.
    */
   async saveConversationHistory(userId: string, messages: any[], conversationId?: number): Promise<number> {
-    let existing: any[] = [];
-
     if (conversationId !== undefined) {
-      existing = await this.db
+      const existing = await this.db
         .select()
         .from(schema.agentConversations)
         .where(
@@ -108,32 +106,25 @@ export class AgentMemoryService {
           )
         )
         .limit(1);
-    } else {
-      existing = await this.db
-        .select()
-        .from(schema.agentConversations)
-        .where(eq(schema.agentConversations.userId, userId))
-        .orderBy(schema.agentConversations.updatedAt)
-        .limit(1);
+
+      if (existing.length > 0) {
+        const targetId = existing[0].id;
+        await this.db
+          .update(schema.agentConversations)
+          .set({
+            messages: messages,
+            updatedAt: new Date(),
+          })
+          .where(eq(schema.agentConversations.id, targetId));
+        return targetId;
+      }
     }
 
-    if (existing.length > 0) {
-      const targetId = existing[0].id;
-      await this.db
-        .update(schema.agentConversations)
-        .set({
-          messages: messages,
-          updatedAt: new Date(),
-        })
-        .where(eq(schema.agentConversations.id, targetId));
-      return targetId;
-    } else {
-      const inserted = await this.db.insert(schema.agentConversations).values({
-        userId,
-        messages: messages,
-      }).returning({ id: schema.agentConversations.id });
-      return inserted[0]?.id;
-    }
+    const inserted = await this.db.insert(schema.agentConversations).values({
+      userId,
+      messages: messages,
+    }).returning({ id: schema.agentConversations.id });
+    return inserted[0]?.id;
   }
 
   /**

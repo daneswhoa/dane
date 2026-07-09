@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, CheckCircle2, AlertTriangle, Cpu, History, Plus } from 'lucide-react';
+import { Sparkles, CheckCircle2, AlertTriangle, Cpu, History, Plus, Wrench } from 'lucide-react';
 import { FormattedMessage } from './SophiaMessageFormatter';
 import { SophiaWidgets } from './SophiaWidgets';
 import { SophiaVoiceWaveform } from './SophiaVoiceWaveform';
@@ -87,6 +87,15 @@ export default function SophiaMessageList({
             <Cpu className="w-3.5 h-3.5" /> Saved Info
           </button>
           <button 
+            onClick={() => {
+              window.dispatchEvent(new CustomEvent('toggle-sophia-widget', { detail: { visible: true } }));
+            }}
+            className="px-2 py-1 rounded bg-coral-500 text-white hover:opacity-90 text-[9px] font-bold font-mono transition-all flex items-center gap-1"
+            title="Launch Floating Sophia Assistant"
+          >
+            <Sparkles className="w-3 h-3" /> LAUNCH WIDGET
+          </button>
+          <button 
             onClick={onNewChat}
             className="px-2 py-1 rounded bg-coral-500/10 text-coral-500 hover:bg-coral-500/20 text-[9px] font-bold font-mono transition-all flex items-center gap-1"
           >
@@ -140,20 +149,32 @@ export default function SophiaMessageList({
                 
                 <div className={`text-[13px] leading-relaxed p-4 rounded-2xl shadow-sm ${
                   msg.sender === 'user'
-                    ? 'bg-paper-800 dark:bg-ink-200 text-white dark:text-ink-900 rounded-tr-sm'
-                    : 'bg-white/60 dark:bg-ink-800/60 backdrop-blur-md border border-paper-200/50 dark:border-ink-700/50 text-paper-800 dark:text-ink-100 rounded-tl-sm'
+                    ? 'bg-coral-500 text-white rounded-tr-sm'
+                    : `bg-white/60 dark:bg-ink-800/60 backdrop-blur-md border border-paper-200/50 dark:border-ink-700/50 text-paper-800 dark:text-ink-100 rounded-tl-sm ${isAnyPending ? 'bubble-tool-active' : ''}`
                 }`}>
                   {msg.blocks && msg.blocks.length > 0 ? (
                     <div className="space-y-4">
                       {hasActions && (
-                        <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-bold font-mono tracking-wider shadow-sm uppercase ${badgeColorClass}`}>
-                          {statusIcon}
-                          <span>
-                            {isAnyPending 
-                              ? (actionBlocks.length > 1 ? `Running Tools (${actionBlocks.length})...` : 'Running Tool...')
-                              : (actionBlocks.length > 1 ? `Tools Used (${actionBlocks.length})` : 'Tool Used')
-                            }
-                          </span>
+                        <div className="flex items-center gap-1.5 select-none" style={{ display: 'flex' }}>
+                          {actionBlocks.map((act, actIdx) => {
+                            const isPending = act.actionStatus === 'pending';
+                            const isFailed = act.actionStatus === 'failed';
+                            return (
+                              <div
+                                key={actIdx}
+                                className={`inline-flex items-center justify-center p-1.5 rounded-lg border shadow-sm ${
+                                  isFailed
+                                    ? 'text-red-500 bg-red-500/5 border-red-500/20'
+                                    : isPending
+                                      ? 'text-coral-500 bg-coral-500/5 border-coral-500/25'
+                                      : 'text-emerald-500 bg-emerald-500/5 border-emerald-500/20'
+                                }`}
+                                title={act.actionName || 'Tool call'}
+                              >
+                                <Wrench className={`w-3.5 h-3.5 ${isPending ? 'animate-wrench-wiggle' : ''}`} />
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
                       {msg.blocks.map((block, bIdx) => {

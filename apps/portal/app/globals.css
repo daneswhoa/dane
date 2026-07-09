@@ -339,3 +339,28 @@
   color: var(--text-primary);
 }
 
+/* Animated Wrench & Chat Bubble glow when Sophia runs tools */
+@keyframes wrench-wiggle {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-20deg); }
+  75% { transform: rotate(20deg); }
+}
+
+.animate-wrench-wiggle {
+  display: inline-block;
+  animation: wrench-wiggle 1s ease-in-out infinite;
+}
+
+.bubble-tool-active {
+  box-shadow: 0 0 16px rgba(255, 107, 107, 0.15) !important;
+  border-color: rgba(255, 107, 107, 0.25) !important;
+  background-color: rgba(255, 255, 255, 0.85) !important;
+  transition: all 0.3s ease;
+}
+
+.dark .bubble-tool-active {
+  box-shadow: 0 0 16px rgba(255, 107, 107, 0.25) !important;
+  border-color: rgba(255, 107, 107, 0.35) !important;
+  background-color: rgba(18, 18, 24, 0.85) !important;
+}
+

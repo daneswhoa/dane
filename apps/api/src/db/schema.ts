@@ -12,6 +12,16 @@ export const numericNumber = customType<{ data: number; driverData: string }>({
   },
 });
 
+// ── Organizations ──
+
+export const organizations = pgTable('organizations', {
+  id: varchar('id', { length: 255 }).primaryKey(),
+  name: varchar('name', { length: 255 }).notNull().unique(),
+  logoUrl: varchar('logo_url', { length: 512 }),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
 // ── Users (managed by Better Auth, but we define the shape for Drizzle) ──
 
 export const users = pgTable('user', {
@@ -22,6 +32,7 @@ export const users = pgTable('user', {
   role: varchar('role', { length: 50 }).notNull().default('tenant'),
   image: varchar('image', { length: 512 }),
   emailVerified: boolean('email_verified').default(false),
+  organizationId: varchar('organization_id', { length: 255 }).references(() => organizations.id),
   organizationName: varchar('organization_name', { length: 255 }),
   phone: varchar('phone', { length: 50 }),
   idNumber: varchar('id_number', { length: 100 }),
@@ -34,6 +45,7 @@ export const users = pgTable('user', {
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
 });
+
 
 // Better Auth session table
 export const sessions = pgTable('session', {
@@ -80,14 +92,24 @@ export const properties = pgTable('properties', {
   name: varchar('name', { length: 255 }).notNull(),
   address: varchar('address', { length: 500 }).notNull(),
   ownerId: varchar('owner_id', { length: 255 }).notNull().references(() => users.id),
+  organizationId: varchar('organization_id', { length: 255 }).references(() => organizations.id),
   organizationName: varchar('organization_name', { length: 255 }),
   unitsCount: integer('units_count').notNull().default(0),
   status: varchar('status', { length: 50 }).notNull().default('active'),
   photoUrl: varchar('photo_url', { length: 512 }),
+  currency: varchar('currency', { length: 10 }).notNull().default('USD'),
   settings: text('settings'),
+  county: varchar('county', { length: 100 }),
+  subcounty: varchar('subcounty', { length: 100 }),
+  latitude: numericNumber('latitude'),
+  longitude: numericNumber('longitude'),
+  amenities: text('amenities'),
+  rules: text('rules'),
+  isListed: boolean('is_listed').default(false),
   createdAt: timestamp('created_at').defaultNow(),
 }, (table) => [
   index('properties_owner_id_idx').on(table.ownerId),
+  index('properties_organization_id_idx').on(table.organizationId),
   index('properties_organization_name_idx').on(table.organizationName),
 ]);
 
@@ -107,7 +129,9 @@ export const units = pgTable('units', {
   recurringFees: numericNumber('recurring_fees').notNull().default(0),
   recurringFeeDetails: text('recurring_fee_details'),
   moveInFeeDetails: text('move_in_fee_details'),
+  images: text('images'),
   arrears: numericNumber('arrears').notNull().default(0),
+  isListed: boolean('is_listed').default(false),
 }, (table) => [
   index('units_property_id_idx').on(table.propertyId),
   index('units_tenant_id_idx').on(table.tenantId),
@@ -125,6 +149,7 @@ export const invoices = pgTable('invoices', {
   unitId: varchar('unit_id', { length: 255 }).references(() => units.id),
   propertyId: varchar('property_id', { length: 255 }).references(() => properties.id),
   ownerId: varchar('owner_id', { length: 255 }).notNull().references(() => users.id),
+  organizationId: varchar('organization_id', { length: 255 }).references(() => organizations.id),
   organizationName: varchar('organization_name', { length: 255 }),
   amount: numericNumber('amount').notNull(),
   amountPaid: numericNumber('amount_paid').notNull().default(0),
@@ -137,6 +162,7 @@ export const invoices = pgTable('invoices', {
   index('invoices_tenant_id_idx').on(table.tenantId),
   index('invoices_property_id_idx').on(table.propertyId),
   index('invoices_owner_id_idx').on(table.ownerId),
+  index('invoices_organization_id_idx').on(table.organizationId),
   index('invoices_organization_name_idx').on(table.organizationName),
 ]);
 
@@ -154,6 +180,7 @@ export const tickets = pgTable('tickets', {
   propertyId: varchar('property_id', { length: 255 }).references(() => properties.id),
   unitId: varchar('unit_id', { length: 255 }).references(() => units.id),
   ownerId: varchar('owner_id', { length: 255 }).notNull().references(() => users.id),
+  organizationId: varchar('organization_id', { length: 255 }).references(() => organizations.id),
   organizationName: varchar('organization_name', { length: 255 }),
   contractorId: varchar('contractor_id', { length: 255 }).references(() => users.id),
   amount: numericNumber('amount'),
@@ -172,6 +199,7 @@ export const tickets = pgTable('tickets', {
   index('tickets_tenant_id_idx').on(table.tenantId),
   index('tickets_property_id_idx').on(table.propertyId),
   index('tickets_owner_id_idx').on(table.ownerId),
+  index('tickets_organization_id_idx').on(table.organizationId),
   index('tickets_organization_name_idx').on(table.organizationName),
 ]);
 
@@ -247,6 +275,7 @@ export const agentActivityLog = pgTable('agent_activity_log', {
 export const invitations = pgTable('invitations', {
   id: varchar('id', { length: 255 }).primaryKey(),
   ownerId: varchar('owner_id', { length: 255 }).notNull(),
+  organizationId: varchar('organization_id', { length: 255 }).references(() => organizations.id),
   organizationName: varchar('organization_name', { length: 255 }),
   email: varchar('email', { length: 255 }),
   targetRole: varchar('target_role', { length: 50 }).notNull().default('tenant'),
@@ -259,6 +288,7 @@ export const invitations = pgTable('invitations', {
   createdAt: timestamp('created_at').defaultNow(),
 }, (table) => [
   index('invitations_owner_id_idx').on(table.ownerId),
+  index('invitations_organization_id_idx').on(table.organizationId),
   index('invitations_organization_name_idx').on(table.organizationName),
 ]);
 
@@ -279,6 +309,7 @@ export const managerRelations = pgTable('manager_relations', {
 export const emailTemplates = pgTable('email_templates', {
   id: varchar('id', { length: 255 }).primaryKey(),
   ownerId: varchar('owner_id', { length: 255 }).notNull(),
+  organizationId: varchar('organization_id', { length: 255 }).references(() => organizations.id),
   organizationName: varchar('organization_name', { length: 255 }),
   name: varchar('name', { length: 255 }).notNull(),
   subject: varchar('subject', { length: 255 }).notNull(),
@@ -287,6 +318,7 @@ export const emailTemplates = pgTable('email_templates', {
   createdAt: timestamp('created_at').defaultNow(),
 }, (table) => [
   index('email_templates_owner_id_idx').on(table.ownerId),
+  index('email_templates_organization_id_idx').on(table.organizationId),
   index('email_templates_organization_name_idx').on(table.organizationName),
 ]);
 
@@ -295,6 +327,7 @@ export const emailTemplates = pgTable('email_templates', {
 export const campaigns = pgTable('campaigns', {
   id: varchar('id', { length: 255 }).primaryKey(),
   ownerId: varchar('owner_id', { length: 255 }).notNull(),
+  organizationId: varchar('organization_id', { length: 255 }).references(() => organizations.id),
   organizationName: varchar('organization_name', { length: 255 }),
   title: varchar('title', { length: 255 }).notNull(),
   subject: varchar('subject', { length: 255 }).notNull(),
@@ -307,12 +340,14 @@ export const campaigns = pgTable('campaigns', {
   createdAt: timestamp('created_at').defaultNow(),
 }, (table) => [
   index('campaigns_owner_id_idx').on(table.ownerId),
+  index('campaigns_organization_id_idx').on(table.organizationId),
   index('campaigns_organization_name_idx').on(table.organizationName),
 ]);
 
 export const auditLogs = pgTable('audit_logs', {
   id: varchar('id', { length: 255 }).primaryKey(),
   ownerId: varchar('owner_id', { length: 255 }).notNull().references(() => users.id),
+  organizationId: varchar('organization_id', { length: 255 }).references(() => organizations.id),
   organizationName: varchar('organization_name', { length: 255 }),
   actorName: varchar('actor_name', { length: 255 }).notNull(),
   actorEmail: varchar('actor_email', { length: 255 }).notNull(),
@@ -327,12 +362,14 @@ export const auditLogs = pgTable('audit_logs', {
   timestamp: timestamp('timestamp').defaultNow().notNull(),
 }, (table) => [
   index('audit_logs_owner_id_idx').on(table.ownerId),
+  index('audit_logs_organization_id_idx').on(table.organizationId),
   index('audit_logs_organization_name_idx').on(table.organizationName),
 ]);
 
 export const automations = pgTable('automations', {
   id: varchar('id', { length: 255 }).primaryKey(),
   ownerId: varchar('owner_id', { length: 255 }).notNull().references(() => users.id),
+  organizationId: varchar('organization_id', { length: 255 }).references(() => organizations.id),
   organizationName: varchar('organization_name', { length: 255 }),
   name: varchar('name', { length: 255 }).notNull(),
   description: text('description').notNull(),
@@ -345,6 +382,7 @@ export const automations = pgTable('automations', {
   createdAt: timestamp('created_at').defaultNow(),
 }, (table) => [
   index('automations_owner_id_idx').on(table.ownerId),
+  index('automations_organization_id_idx').on(table.organizationId),
   index('automations_organization_name_idx').on(table.organizationName),
 ]);
 
@@ -363,6 +401,7 @@ export const notifications = pgTable('notifications', {
 export const announcements = pgTable('announcements', {
   id: varchar('id', { length: 255 }).primaryKey(),
   ownerId: varchar('owner_id', { length: 255 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  organizationId: varchar('organization_id', { length: 255 }).references(() => organizations.id),
   organizationName: varchar('organization_name', { length: 255 }),
   title: varchar('title', { length: 255 }).notNull(),
   content: text('content').notNull(),
@@ -373,6 +412,7 @@ export const announcements = pgTable('announcements', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (table) => [
   index('announcements_owner_id_idx').on(table.ownerId),
+  index('announcements_organization_id_idx').on(table.organizationId),
   index('announcements_organization_name_idx').on(table.organizationName),
 ]);
 
@@ -431,6 +471,71 @@ export const todos = pgTable('todos', {
 }, (table) => [
   index('todos_user_id_idx').on(table.userId),
 ]);
+
+export const pageVisits = pgTable('page_visits', {
+  id: varchar('id', { length: 255 }).primaryKey(),
+  visitorId: varchar('visitor_id', { length: 255 }).notNull(),
+  userId: varchar('user_id', { length: 255 }),
+  userEmail: varchar('user_email', { length: 255 }),
+  userName: varchar('user_name', { length: 255 }),
+  route: varchar('route', { length: 512 }).notNull(),
+  referrer: varchar('referrer', { length: 512 }),
+  deviceType: varchar('device_type', { length: 50 }).notNull(),
+  browser: varchar('browser', { length: 100 }),
+  os: varchar('os', { length: 100 }),
+  country: varchar('country', { length: 100 }),
+  ip: varchar('ip', { length: 45 }),
+  userAgent: text('user_agent'),
+  timestamp: timestamp('timestamp').defaultNow().notNull(),
+}, (table) => [
+  index('page_visits_visitor_idx').on(table.visitorId),
+  index('page_visits_user_idx').on(table.userId),
+  index('page_visits_route_idx').on(table.route),
+  index('page_visits_timestamp_idx').on(table.timestamp),
+]);
+
+// ── Credit Transactions (Double-Entry Ledger) ──
+
+export const creditTransactions = pgTable('credit_transactions', {
+  id: varchar('id', { length: 255 }).primaryKey(), // txid (SHA-256 block hash)
+  senderUsername: varchar('sender_username', { length: 255 }).notNull(),
+  receiverUsername: varchar('receiver_username', { length: 255 }).notNull(),
+  amount: integer('amount').notNull(),
+  transactionType: varchar('transaction_type', { length: 50 }).notNull(), // 'mint', 'transfer', 'purchase', 'spend'
+  operationCategory: varchar('operation_category', { length: 50 }), // 'email_broadcast', 'sophia_chat', 'whatsapp_notif', 'sms_notif', 'manual_adjust'
+  description: text('description'),
+  previousTxid: varchar('previous_txid', { length: 255 }),
+  timestamp: timestamp('timestamp').defaultNow().notNull(),
+}, (table) => [
+  index('credit_transactions_sender_idx').on(table.senderUsername),
+  index('credit_transactions_receiver_idx').on(table.receiverUsername),
+  index('credit_transactions_prev_txid_idx').on(table.previousTxid),
+]);
+
+// ── System Configuration (Dynamic Parameter Pricing) ──
+
+export const systemConfigs = pgTable('system_configs', {
+  key: varchar('key', { length: 255 }).primaryKey(), // e.g. 'price_sophia_chat'
+  value: text('value').notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// ── Premium Subscriptions ──
+
+export const subscriptions = pgTable('subscriptions', {
+  id: varchar('id', { length: 255 }).primaryKey(),
+  userId: varchar('user_id', { length: 255 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  tier: varchar('tier', { length: 50 }).notNull().default('free'), // 'free', 'premium'
+  status: varchar('status', { length: 50 }).notNull().default('active'), // 'active', 'cancelled', 'expired'
+  expiresAt: timestamp('expires_at'),
+  stripeSubscriptionId: varchar('stripe_subscription_id', { length: 255 }),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => [
+  index('subscriptions_user_id_idx').on(table.userId),
+]);
+
+
 
 
 

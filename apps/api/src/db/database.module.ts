@@ -50,10 +50,58 @@ export class DatabaseModule implements OnModuleInit {
     console.log('Ensuring tables exist...');
     try {
       await this.executeWithRetry(async () => {
+        // Create organizations table first
+        await this.db.execute(sql`
+          CREATE TABLE IF NOT EXISTS organizations (
+            id VARCHAR(255) PRIMARY KEY,
+            name VARCHAR(255) NOT NULL UNIQUE,
+            logo_url VARCHAR(512),
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+          );
+        `);
+        console.log('Table organizations is ready.');
+
+        // Alter user table to add organization_id
+        await this.db.execute(sql`
+          ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "organization_id" VARCHAR(255);
+        `);
+
+        // Alter properties table to add organization_id
+        await this.db.execute(sql`
+          ALTER TABLE "properties" ADD COLUMN IF NOT EXISTS "organization_id" VARCHAR(255);
+        `);
+
+        // Alter invoices table to add organization_id
+        await this.db.execute(sql`
+          ALTER TABLE "invoices" ADD COLUMN IF NOT EXISTS "organization_id" VARCHAR(255);
+        `);
+
+        // Alter tickets table to add organization_id
+        await this.db.execute(sql`
+          ALTER TABLE "tickets" ADD COLUMN IF NOT EXISTS "organization_id" VARCHAR(255);
+        `);
+
+        // Alter invitations table to add organization_id
+        await this.db.execute(sql`
+          ALTER TABLE "invitations" ADD COLUMN IF NOT EXISTS "organization_id" VARCHAR(255);
+        `);
+
+        // Alter email_templates table to add organization_id
+        await this.db.execute(sql`
+          ALTER TABLE "email_templates" ADD COLUMN IF NOT EXISTS "organization_id" VARCHAR(255);
+        `);
+
+        // Alter campaigns table to add organization_id
+        await this.db.execute(sql`
+          ALTER TABLE "campaigns" ADD COLUMN IF NOT EXISTS "organization_id" VARCHAR(255);
+        `);
+
         await this.db.execute(sql`
           CREATE TABLE IF NOT EXISTS audit_logs (
             id VARCHAR(255) PRIMARY KEY,
             owner_id VARCHAR(255) NOT NULL,
+            organization_id VARCHAR(255),
             organization_name VARCHAR(255),
             actor_name VARCHAR(255) NOT NULL,
             actor_email VARCHAR(255) NOT NULL,
@@ -69,7 +117,7 @@ export class DatabaseModule implements OnModuleInit {
           );
         `);
         await this.db.execute(sql`
-          CREATE INDEX IF NOT EXISTS audit_logs_organization_name_idx ON audit_logs (organization_name);
+          CREATE INDEX IF NOT EXISTS audit_logs_organization_id_idx ON audit_logs (organization_id);
         `);
         console.log('Table audit_logs is ready.');
 
@@ -77,6 +125,7 @@ export class DatabaseModule implements OnModuleInit {
           CREATE TABLE IF NOT EXISTS automations (
             id VARCHAR(255) PRIMARY KEY,
             owner_id VARCHAR(255) NOT NULL,
+            organization_id VARCHAR(255),
             organization_name VARCHAR(255),
             name VARCHAR(255) NOT NULL,
             description TEXT NOT NULL,
@@ -93,7 +142,7 @@ export class DatabaseModule implements OnModuleInit {
           CREATE INDEX IF NOT EXISTS automations_owner_id_idx ON automations (owner_id);
         `);
         await this.db.execute(sql`
-          CREATE INDEX IF NOT EXISTS automations_organization_name_idx ON automations (organization_name);
+          CREATE INDEX IF NOT EXISTS automations_organization_id_idx ON automations (organization_id);
         `);
         console.log('Table automations is ready.');
 
@@ -117,6 +166,7 @@ export class DatabaseModule implements OnModuleInit {
           CREATE TABLE IF NOT EXISTS announcements (
             id VARCHAR(255) PRIMARY KEY,
             owner_id VARCHAR(255) NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+            organization_id VARCHAR(255),
             organization_name VARCHAR(255),
             title VARCHAR(255) NOT NULL,
             content TEXT NOT NULL,
@@ -131,7 +181,7 @@ export class DatabaseModule implements OnModuleInit {
           CREATE INDEX IF NOT EXISTS announcements_owner_id_idx ON announcements (owner_id);
         `);
         await this.db.execute(sql`
-          CREATE INDEX IF NOT EXISTS announcements_organization_name_idx ON announcements (organization_name);
+          CREATE INDEX IF NOT EXISTS announcements_organization_id_idx ON announcements (organization_id);
         `);
         console.log('Table announcements is ready.');
 
@@ -161,7 +211,75 @@ export class DatabaseModule implements OnModuleInit {
         await this.db.execute(sql`
           CREATE INDEX IF NOT EXISTS contractor_bookmarks_user_id_idx ON contractor_bookmarks (user_id);
         `);
+        await this.db.execute(sql`
+          ALTER TABLE "units" ADD COLUMN IF NOT EXISTS "images" text;
+        `);
         console.log('Table contractor_bookmarks is ready.');
+
+        // Initialize credit transactions table
+        await this.db.execute(sql`
+          CREATE TABLE IF NOT EXISTS credit_transactions (
+            id VARCHAR(255) PRIMARY KEY,
+            sender_username VARCHAR(255) NOT NULL,
+            receiver_username VARCHAR(255) NOT NULL,
+            amount INTEGER NOT NULL,
+            transaction_type VARCHAR(50) NOT NULL,
+            operation_category VARCHAR(50),
+            description TEXT,
+            previous_txid VARCHAR(255),
+            timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
+          );
+        `);
+        await this.db.execute(sql`
+          CREATE INDEX IF NOT EXISTS credit_transactions_sender_idx ON credit_transactions (sender_username);
+        `);
+        await this.db.execute(sql`
+          CREATE INDEX IF NOT EXISTS credit_transactions_receiver_idx ON credit_transactions (receiver_username);
+        `);
+        await this.db.execute(sql`
+          CREATE INDEX IF NOT EXISTS credit_transactions_prev_txid_idx ON credit_transactions (previous_txid);
+        `);
+        console.log('Table credit_transactions is ready.');
+
+        // Initialize system configs table
+        await this.db.execute(sql`
+          CREATE TABLE IF NOT EXISTS system_configs (
+            key VARCHAR(255) PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
+          );
+        `);
+        // Seed default parameters
+        await this.db.execute(sql`
+          INSERT INTO system_configs (key, value) VALUES 
+            ('price_email_broadcast', '2'),
+            ('price_sophia_chat', '5'),
+            ('price_sophia_tool', '15'),
+            ('price_excel_parse', '50'),
+            ('price_sms_dispatch', '5'),
+            ('price_whatsapp_dispatch', '10'),
+            ('price_id_ocr_scan', '25')
+          ON CONFLICT (key) DO NOTHING;
+        `);
+        console.log('Table system_configs is ready.');
+
+        // Initialize premium subscriptions table
+        await this.db.execute(sql`
+          CREATE TABLE IF NOT EXISTS subscriptions (
+            id VARCHAR(255) PRIMARY KEY,
+            user_id VARCHAR(255) NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+            tier VARCHAR(50) NOT NULL DEFAULT 'free',
+            status VARCHAR(50) NOT NULL DEFAULT 'active',
+            expires_at TIMESTAMP WITH TIME ZONE,
+            stripe_subscription_id VARCHAR(255),
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
+          );
+        `);
+        await this.db.execute(sql`
+          CREATE INDEX IF NOT EXISTS subscriptions_user_id_idx ON subscriptions (user_id);
+        `);
+        console.log('Table subscriptions is ready.');
       });
 
       console.log('All tables verified.');

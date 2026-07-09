@@ -2,16 +2,20 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { 
-  Building2, MapPin, DollarSign, Home, User, Mail, 
-  Phone, Calendar, Users, ArrowLeft, Loader2, AlertTriangle, ShieldCheck,
-  Settings, Pencil, ArrowRightLeft
-} from 'lucide-react';
+import { Loader2, AlertTriangle, ArrowLeft } from 'lucide-react';
+import DashboardLayout from '../../components/DashboardLayout';
 import { EditPropertyModal } from '../../components/properties/EditPropertyModal';
 import { EditUnitModal } from '../../components/properties/EditUnitModal';
 import { MoveTenantModal } from '../../components/tenants/MoveTenantModal';
 import { usePermissionsStore } from '../../store/usePermissionsStore';
 import { AccessDeniedOverlay } from '../../components/team/AccessDeniedOverlay';
+
+// Import split components
+import PropertyHeroCard from './components/PropertyHeroCard';
+import UnitsFilterBar from './components/UnitsFilterBar';
+import FloorVisualization from './components/FloorVisualization';
+import UnitInspectorDrawer from './components/UnitInspectorDrawer';
+import MoveClientHereModal from './components/MoveClientHereModal';
 
 interface Unit {
   id: string;
@@ -21,6 +25,14 @@ interface Unit {
   tenantId: string | null;
   tenantName: string | null;
   tenantEmail: string | null;
+  floor: string | null;
+  unitType: string | null;
+  arrears: number | null;
+  deposit?: number | null;
+  moveInFees?: number | null;
+  recurringFees?: number | null;
+  moveInFeeDetails?: string | null;
+  recurringFeeDetails?: string | null;
 }
 
 interface Property {
@@ -30,6 +42,7 @@ interface Property {
   unitsCount: number;
   status: string;
   photoUrl: string | null;
+  currency?: string;
 }
 
 export default function PropertyDetailPage() {
@@ -47,11 +60,24 @@ export default function PropertyDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // Modals state
+  // Filtering states
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedHouseType, setSelectedHouseType] = useState('all');
+  const [selectedOccupancy, setSelectedOccupancy] = useState('all');
+  const [selectedArrears, setSelectedArrears] = useState('all');
+
+  // Modals & Panels state
   const [isEditPropOpen, setIsEditPropOpen] = useState(false);
   const [editingUnit, setEditingUnit] = useState<Unit | null>(null);
   const [movingTenant, setMovingTenant] = useState<{ id: string; name: string; unitLabel: string } | null>(null);
   const [deniedAction, setDeniedAction] = useState<string | null>(null);
+
+  // Inspector Drawer State
+  const [selectedUnitForInspect, setSelectedUnitForInspect] = useState<Unit | null>(null);
+
+  // Move Client Here Modal State
+  const [isMoveClientHereOpen, setIsMoveClientHereOpen] = useState(false);
+  const [targetVacantUnit, setTargetVacantUnit] = useState<Unit | null>(null);
 
   async function loadProperty() {
     try {
@@ -63,6 +89,12 @@ export default function PropertyDetailPage() {
       
       setProperty(data.property);
       setUnits(data.units || []);
+      
+      // Update selected unit for inspect to sync details if open
+      if (selectedUnitForInspect) {
+        const updatedUnit = (data.units || []).find((u: Unit) => u.id === selectedUnitForInspect.id);
+        if (updatedUnit) setSelectedUnitForInspect(updatedUnit);
+      }
     } catch (err: any) {
       setError(err.message || 'Error occurred while loading property details.');
     } finally {
@@ -75,6 +107,10 @@ export default function PropertyDetailPage() {
       loadProperty();
     }
   }, [propertyId]);
+
+  if (!canView) {
+    return <AccessDeniedOverlay moduleName="Properties" actionName="View Properties" />;
+  }
 
   if (isLoading) {
     return (
@@ -107,269 +143,216 @@ export default function PropertyDetailPage() {
     );
   }
 
+  // Derived metrics
   const activeUnits = units.length;
   const occupiedCount = units.filter(u => u.status === 'occupied').length;
   const totalRentRoll = units.reduce((sum, u) => sum + (Number(u.rent) || 0), 0);
   const avgRent = activeUnits > 0 ? Math.round(totalRentRoll / activeUnits) : 0;
   const occupancyRate = activeUnits > 0 ? Math.round((occupiedCount / activeUnits) * 100) : 100;
+  const totalArrears = units.reduce((sum, u) => sum + (Number(u.arrears || 0) || 0), 0);
 
-  if (!canView) {
-    return <AccessDeniedOverlay moduleName="Properties" actionName="View Properties" />;
-  }
+  // Dynamic filter values
+  const houseTypesList = Array.from(new Set(units.map(u => u.unitType || 'Standard')));
+
+  // Filtering logic
+  const filteredUnits = units.filter(unit => {
+    const matchesSearch = 
+      unit.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      unit.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (unit.tenantName && unit.tenantName.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (unit.tenantEmail && unit.tenantEmail.toLowerCase().includes(searchQuery.toLowerCase()));
+
+    const matchesType = selectedHouseType === 'all' || (unit.unitType || 'Standard') === selectedHouseType;
+    
+    const matchesOccupancy = 
+      selectedOccupancy === 'all' || 
+      (selectedOccupancy === 'occupied' && unit.status === 'occupied') ||
+      (selectedOccupancy === 'vacant' && unit.status === 'vacant');
+
+    const matchesArrears = 
+      selectedArrears === 'all' ||
+      (selectedArrears === 'arrears' && Number(unit.arrears || 0) > 0) ||
+      (selectedArrears === 'no-arrears' && Number(unit.arrears || 0) === 0);
+
+    return matchesSearch && matchesType && matchesOccupancy && matchesArrears;
+  });
+
+  // Group units by floor
+  const unitsByFloor: Record<string, Unit[]> = {};
+  filteredUnits.forEach(unit => {
+    const floorLabel = unit.floor && unit.floor.trim() !== '' ? `Floor ${unit.floor}` : 'Ground Floor';
+    if (!unitsByFloor[floorLabel]) {
+      unitsByFloor[floorLabel] = [];
+    }
+    unitsByFloor[floorLabel].push(unit);
+  });
+
+  // Sort floors descending
+  const sortedFloors = Object.keys(unitsByFloor).sort((a, b) => {
+    if (a === 'Ground Floor') return 1;
+    if (b === 'Ground Floor') return -1;
+    
+    const numA = parseInt(a.replace(/^\D+/g, '')) || 0;
+    const numB = parseInt(b.replace(/^\D+/g, '')) || 0;
+    return numB - numA;
+  });
 
   return (
-    <div className="min-h-screen bg-paper-50 dark:bg-ink-950 text-paper-900 dark:text-white p-4 md:p-8 space-y-6 transition-colors duration-200 relative">
-      {deniedAction && (
-        <AccessDeniedOverlay 
-          moduleName="Properties" 
-          actionName={deniedAction} 
-          onClose={() => setDeniedAction(null)} 
-        />
-      )}
-      
-      {/* Top action bar */}
-      <div className="max-w-6xl mx-auto flex items-center justify-between">
-        <button
-          onClick={() => router.push('/properties')}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-white dark:bg-ink-900 border border-paper-250 dark:border-ink-800 text-paper-700 dark:text-ink-200 rounded hover:bg-paper-100 dark:hover:bg-ink-800 transition-all shadow-sm"
-        >
-          <ArrowLeft className="w-4 h-4" /> Back to Portfolio
-        </button>
-
-        {property.status === 'pending' && (
-          <button
-            onClick={() => {
-              if (!canEdit) {
-                setDeniedAction('Edit');
-              } else {
-                router.push(`/properties/${property.id}/setup`);
-              }
-            }}
-            className="px-3 py-1.5 text-xs font-semibold bg-amber-500 text-white rounded hover:bg-amber-600 transition-all shadow-sm"
-          >
-            Complete Setup Configuration
-          </button>
-        )}
-      </div>
-
-      {/* Hero Card */}
-      <div className="max-w-6xl mx-auto bg-white dark:bg-ink-900 border border-paper-200 dark:border-ink-800 rounded-xl overflow-hidden shadow-sm flex flex-col md:flex-row">
-        {/* Photo */}
-        <div className="md:w-1/3 h-48 md:h-auto relative bg-paper-100 dark:bg-ink-950">
-          <img 
-            src={property.photoUrl || (property.unitsCount > 1 ? '/default_apartment.png' : '/default_house.png')} 
-            alt={property.name} 
-            className="w-full h-full object-cover"
+    <DashboardLayout>
+      <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto w-full animate-fade-in relative text-paper-900 dark:text-white transition-colors duration-200">
+        {deniedAction && (
+          <AccessDeniedOverlay 
+            moduleName="Properties" 
+            actionName={deniedAction} 
+            onClose={() => setDeniedAction(null)} 
           />
-          <div className="absolute inset-0 bg-gradient-to-r from-transparent to-black/30 md:hidden"></div>
+        )}
+        
+        {/* Navigation Bar */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <button
+            onClick={() => router.push('/properties')}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-white dark:bg-ink-800 border border-paper-200 dark:border-ink-700 text-paper-700 dark:text-ink-200 rounded hover:bg-paper-100 dark:hover:bg-ink-750 transition-all shadow-sm"
+          >
+            <ArrowLeft className="w-4 h-4 text-coral-500" /> Back to Portfolio
+          </button>
+
           {property.status === 'pending' && (
-            <div className="absolute top-3 left-3 bg-amber-500 text-white px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider animate-pulse">
-              Pending Setup
-            </div>
+            <button
+              onClick={() => {
+                if (!canEdit) {
+                  setDeniedAction('Edit');
+                } else {
+                  router.push(`/properties/${property.id}/setup`);
+                }
+              }}
+              className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-amber-500 text-white rounded hover:bg-amber-600 transition-all shadow-sm"
+            >
+              <AlertTriangle className="w-3.5 h-3.5" /> Complete Setup Configuration
+            </button>
           )}
         </div>
 
-        {/* Specs */}
-        <div className="p-6 md:w-2/3 flex flex-col justify-between space-y-6">
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-xl font-bold tracking-tight text-paper-950 dark:text-white">
-                {property.name}
-              </h1>
-              <button
-                onClick={() => {
-                  if (!canEdit) {
-                    setDeniedAction('Edit');
-                  } else {
-                    setIsEditPropOpen(true);
-                  }
-                }}
-                className="p-1 rounded hover:bg-paper-100 dark:hover:bg-ink-800 text-paper-400 dark:text-ink-400 hover:text-coral-500 transition-colors"
-                title="Edit Property & Adjust Rent"
-              >
-                <Settings className="w-4 h-4" />
-              </button>
-              <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold uppercase tracking-wide">
-                Active
-              </span>
-            </div>
-            
-            <p className="text-xs text-paper-500 dark:text-ink-400 flex items-center gap-1">
-              <MapPin className="w-3.5 h-3.5 text-coral-500 shrink-0" />
-              {property.address}
-            </p>
-          </div>
+        {/* Hero Card Component */}
+        <PropertyHeroCard 
+          property={property}
+          occupancyRate={occupancyRate}
+          totalRentRoll={totalRentRoll}
+          avgRent={avgRent}
+          totalArrears={totalArrears}
+          canEdit={canEdit}
+          onSettingsClick={() => {
+            if (!canEdit) setDeniedAction('Edit');
+            else setIsEditPropOpen(true);
+          }}
+          onSetupClick={() => router.push(`/properties/${property.id}/setup`)}
+        />
 
-          {/* Quick Metrics */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-4 border-t border-paper-150 dark:border-ink-800/80">
-            <div className="flex flex-col">
-              <span className="text-[9px] uppercase font-bold text-paper-400 dark:text-ink-500 tracking-wider">
-                Total Units
-              </span>
-              <span className="text-sm font-bold text-paper-900 dark:text-white mt-0.5">
-                {property.unitsCount}
-              </span>
-            </div>
+        {/* Filter Bar Component */}
+        <UnitsFilterBar 
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          selectedHouseType={selectedHouseType}
+          onHouseTypeChange={setSelectedHouseType}
+          selectedOccupancy={selectedOccupancy}
+          onOccupancyChange={setSelectedOccupancy}
+          selectedArrears={selectedArrears}
+          onArrearsChange={setSelectedArrears}
+          houseTypesList={houseTypesList}
+        />
 
-            <div className="flex flex-col">
-              <span className="text-[9px] uppercase font-bold text-paper-400 dark:text-ink-500 tracking-wider">
-                Occupancy Rate
-              </span>
-              <span className="text-sm font-bold text-paper-900 dark:text-white mt-0.5">
-                {occupancyRate}%
-              </span>
-            </div>
+        {/* Floor Visualization Map */}
+        <FloorVisualization 
+          sortedFloors={sortedFloors}
+          unitsByFloor={unitsByFloor}
+          onInspect={setSelectedUnitForInspect}
+          onMoveClient={(unit) => {
+            setTargetVacantUnit(unit);
+            setIsMoveClientHereOpen(true);
+          }}
+          onMoveTenant={(unit) => {
+            if (!canManageLeases) setDeniedAction('Manage Leases');
+            else setMovingTenant({ id: unit.tenantId!, name: unit.tenantName!, unitLabel: unit.label });
+          }}
+          onConfigure={(unit) => {
+            if (!canEdit) setDeniedAction('Edit');
+            else setEditingUnit(unit);
+          }}
+          canEdit={canEdit}
+          canManageLeases={canManageLeases}
+          propertyCurrency={property.currency}
+        />
 
-            <div className="flex flex-col">
-              <span className="text-[9px] uppercase font-bold text-paper-400 dark:text-ink-500 tracking-wider">
-                Monthly Rent Roll
-              </span>
-              <span className="text-sm font-bold text-paper-900 dark:text-white mt-0.5">
-                ${totalRentRoll.toLocaleString()}
-              </span>
-            </div>
+        {/* Detail Inspection Drawer Overlay */}
+        {selectedUnitForInspect && (
+          <UnitInspectorDrawer 
+            unit={selectedUnitForInspect}
+            propertyId={propertyId}
+            onClose={() => setSelectedUnitForInspect(null)}
+            onRefresh={loadProperty}
+            onMoveClientClick={() => {
+              setTargetVacantUnit(selectedUnitForInspect);
+              setIsMoveClientHereOpen(true);
+            }}
+            propertyCurrency={property.currency}
+          />
+        )}
 
-            <div className="flex flex-col">
-              <span className="text-[9px] uppercase font-bold text-paper-400 dark:text-ink-500 tracking-wider">
-                Average Rent
-              </span>
-              <span className="text-sm font-bold text-paper-900 dark:text-white mt-0.5">
-                ${avgRent.toLocaleString()}/mo
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
+        {/* Move Client Here Modal Overlay */}
+        {isMoveClientHereOpen && targetVacantUnit && (
+          <MoveClientHereModal 
+            targetVacantUnit={targetVacantUnit}
+            onClose={() => {
+              setIsMoveClientHereOpen(false);
+              setTargetVacantUnit(null);
+            }}
+            onSuccess={() => {
+              setIsMoveClientHereOpen(false);
+              setTargetVacantUnit(null);
+              loadProperty();
+            }}
+          />
+        )}
 
-      {/* Units List */}
-      <div className="max-w-6xl mx-auto space-y-4">
-        <h2 className="text-xs font-bold uppercase tracking-wider text-paper-400 dark:text-ink-500">
-          Units Configuration Details
-        </h2>
+        {/* Edit Property Settings Modal */}
+        {isEditPropOpen && (
+          <EditPropertyModal
+            property={property}
+            onClose={() => setIsEditPropOpen(false)}
+            onSuccess={() => {
+              setIsEditPropOpen(false);
+              loadProperty();
+            }}
+          />
+        )}
 
-        {units.length === 0 ? (
-          <div className="bg-white dark:bg-ink-900 border border-paper-200 dark:border-ink-800 rounded-lg p-6 text-center text-xs text-paper-500 dark:text-ink-400">
-            No units configured. Complete setup to generate rental items.
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {units.map((unit) => (
-              <div 
-                key={unit.id}
-                className="bg-white dark:bg-ink-900 border border-paper-200 dark:border-ink-800 rounded-lg p-5 shadow-sm space-y-4"
-              >
-                {/* Header */}
-                <div className="flex items-center justify-between pb-2.5 border-b border-paper-150 dark:border-ink-800">
-                  <span className="text-xs font-bold text-paper-900 dark:text-white flex items-center gap-1.5">
-                    <Home className="w-4 h-4 text-coral-500" />
-                    {unit.label}
-                  </span>
+        {/* Configure Unit Modal */}
+        {editingUnit && (
+          <EditUnitModal
+            unit={editingUnit}
+            onClose={() => setEditingUnit(null)}
+            onSuccess={() => {
+              setEditingUnit(null);
+              loadProperty();
+            }}
+          />
+        )}
 
-                  <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
-                    unit.status === 'occupied' 
-                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' 
-                      : 'bg-paper-100 dark:bg-ink-800 text-paper-500 dark:text-ink-400'
-                  }`}>
-                    {unit.status}
-                  </span>
-                </div>
-
-                {/* Finance Info */}
-                <div className="flex items-center justify-between text-xs text-paper-700 dark:text-ink-300">
-                  <span>Monthly Rate:</span>
-                  <span className="font-bold text-paper-900 dark:text-white">${Number(unit.rent).toLocaleString()}/mo</span>
-                </div>
-
-                {/* Tenant Details */}
-                {unit.status === 'occupied' && unit.tenantName ? (
-                  <div className="p-3 bg-paper-50 dark:bg-ink-950 rounded-lg space-y-2 text-[11px]">
-                    <div className="flex items-center gap-1.5 text-paper-600 dark:text-ink-300 font-semibold">
-                      <User className="w-3.5 h-3.5 text-coral-500" />
-                      <span>{unit.tenantName}</span>
-                    </div>
-
-                    <div className="flex items-center gap-1.5 text-paper-500 dark:text-ink-400">
-                      <Mail className="w-3.5 h-3.5" />
-                      <span className="truncate">{unit.tenantEmail || 'No email saved'}</span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="p-3 bg-paper-50 dark:bg-ink-950 rounded-lg text-center text-[10px] text-paper-400 dark:text-ink-500">
-                    Unit is currently vacant.
-                  </div>
-                )}
-
-                {/* Actions Toolbar */}
-                <div className="pt-2.5 border-t border-paper-150 dark:border-ink-800 flex items-center justify-end gap-2">
-                  {unit.status === 'occupied' && unit.tenantId && (
-                    <button
-                      onClick={() => {
-                        if (!canManageLeases) {
-                          setDeniedAction('Manage Leases');
-                        } else {
-                          setMovingTenant({ id: unit.tenantId!, name: unit.tenantName!, unitLabel: unit.label });
-                        }
-                      }}
-                      className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold border border-paper-200 dark:border-ink-800 text-paper-700 dark:text-ink-300 hover:bg-paper-50 dark:hover:bg-ink-800 rounded transition-all"
-                    >
-                      <ArrowRightLeft className="w-3.5 h-3.5 text-coral-500" /> Move Tenant
-                    </button>
-                  )}
-                  <button
-                    onClick={() => {
-                      if (!canEdit) {
-                        setDeniedAction('Edit');
-                      } else {
-                        setEditingUnit(unit);
-                      }
-                    }}
-                    className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold border border-paper-200 dark:border-ink-800 text-paper-700 dark:text-ink-300 hover:bg-paper-50 dark:hover:bg-ink-800 rounded transition-all"
-                  >
-                    <Pencil className="w-3.5 h-3.5 text-coral-500" /> Configure Unit
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
+        {/* Move Existing Tenant Modal */}
+        {movingTenant && (
+          <MoveTenantModal
+            tenantId={movingTenant.id}
+            tenantName={movingTenant.name}
+            currentUnitLabel={movingTenant.unitLabel}
+            currentPropertyName={property.name}
+            onClose={() => setMovingTenant(null)}
+            onSuccess={() => {
+              setMovingTenant(null);
+              loadProperty();
+            }}
+          />
         )}
       </div>
-
-      {isEditPropOpen && (
-        <EditPropertyModal
-          property={property}
-          onClose={() => setIsEditPropOpen(false)}
-          onSuccess={() => {
-            setIsEditPropOpen(false);
-            loadProperty();
-          }}
-        />
-      )}
-
-      {editingUnit && (
-        <EditUnitModal
-          unit={editingUnit}
-          onClose={() => setEditingUnit(null)}
-          onSuccess={() => {
-            setEditingUnit(null);
-            loadProperty();
-          }}
-        />
-      )}
-
-      {movingTenant && (
-        <MoveTenantModal
-          tenantId={movingTenant.id}
-          tenantName={movingTenant.name}
-          currentUnitLabel={movingTenant.unitLabel}
-          currentPropertyName={property.name}
-          onClose={() => setMovingTenant(null)}
-          onSuccess={() => {
-            setMovingTenant(null);
-            loadProperty();
-          }}
-        />
-      )}
-
-    </div>
+    </DashboardLayout>
   );
 }

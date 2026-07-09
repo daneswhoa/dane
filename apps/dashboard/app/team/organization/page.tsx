@@ -5,9 +5,12 @@ import { useSession } from '@repo/auth';
 import { 
   Camera, TrendingUp, Users, Home, Zap, MapPin, Save, AlertTriangle, 
   Mail, CheckCircle2, Loader2, Shield, MoreVertical, BookOpen, Plus, 
-  Copy, Check, Info, Lock, ShieldAlert, Settings, Wrench, Wallet, Building
+  Copy, Check, Info, Lock, ShieldAlert, Settings, Wrench, Wallet, Building, CreditCard, Crown, Coins
 } from 'lucide-react';
 import { InviteTenantModal } from '../../components/tenants/InviteTenantModal';
+import { SubscriptionTab } from './components/SubscriptionTab';
+import { CreditsWalletTab } from './components/CreditsWalletTab';
+import { RolesMatrixTab } from './components/RolesMatrixTab';
 
 const MODULE_TABS = [
   { name: 'Properties', actions: ['View Properties', 'List New', 'Edit', 'Delete'] },
@@ -23,7 +26,7 @@ export default function OrganizationPage() {
   const { data: session, refetch } = useSession();
   const user = session?.user as any;
 
-  const [activeTab, setActiveTab] = useState<'profile' | 'members' | 'roles'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'members' | 'roles' | 'subscription' | 'credits'>('profile');
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<any>({
     totalUnits: 0,
@@ -72,6 +75,19 @@ export default function OrganizationPage() {
   const [editPermissions, setEditPermissions] = useState<Record<string, { access: 'none' | 'read' | 'full' | 'custom', actions: string[] }>>({});
   const [isSavingAccess, setIsSavingAccess] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+
+  // Tab 4: Billing & Subscriptions State
+  const [billingData, setBillingData] = useState<any>({
+    subscription: { tier: 'free', status: 'active', expiresAt: null },
+    tokenBalance: 0,
+    usage: []
+  });
+  const [billingLoading, setBillingLoading] = useState(false);
+  const [dateFilterStart, setDateFilterStart] = useState('');
+  const [dateFilterEnd, setDateFilterEnd] = useState('');
+  const [selectedTeammateFilter, setSelectedTeammateFilter] = useState('all');
+  const [creditRechargeAmount, setCreditRechargeAmount] = useState(1500);
+  const [billingMessage, setBillingMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -219,6 +235,57 @@ export default function OrganizationPage() {
       setCreateLoading(false);
     }
   };
+
+  const fetchBillingInfo = async () => {
+    setBillingLoading(true);
+    try {
+      let url = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/team/billing-info`;
+      const queryParams: string[] = [];
+      if (dateFilterStart) queryParams.push(`startDate=${dateFilterStart}`);
+      if (dateFilterEnd) queryParams.push(`endDate=${dateFilterEnd}`);
+      if (queryParams.length > 0) {
+        url += `?${queryParams.join('&')}`;
+      }
+      
+      const res = await fetch(url, { credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        setBillingData(data);
+      }
+    } catch (e) {
+      console.error('Failed to fetch billing info:', e);
+    } finally {
+      setBillingLoading(false);
+    }
+  };
+
+  const handleCancelPremium = async () => {
+    if (!confirm('Are you sure you want to cancel your Premium subscription? Your limits will be reduced to 3 properties, and access to Sophia AI will be disabled.')) return;
+    setBillingLoading(true);
+    setBillingMessage(null);
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/team/billing/cancel-subscription`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+      if (res.ok) {
+        setBillingMessage('Premium subscription has been cancelled.');
+        fetchBillingInfo();
+      } else {
+        throw new Error('Failed to cancel subscription.');
+      }
+    } catch (err: any) {
+      setBillingMessage(err.message || 'Action failed.');
+    } finally {
+      setBillingLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'subscription' || activeTab === 'credits') {
+      fetchBillingInfo();
+    }
+  }, [activeTab, dateFilterStart, dateFilterEnd]);
 
   useEffect(() => {
     fetchStats();
@@ -452,12 +519,55 @@ export default function OrganizationPage() {
           >
             Roles Matrix
           </button>
+          <button
+            onClick={() => setActiveTab('subscription')}
+            className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-all flex items-center gap-1 ${activeTab === 'subscription' ? 'bg-white dark:bg-ink-800 text-paper-900 dark:text-white shadow-sm' : 'text-paper-500 dark:text-ink-400 hover:text-paper-900 dark:hover:text-white'}`}
+          >
+            <Crown className="w-3 h-3" /> Plan
+          </button>
+          <button
+            onClick={() => setActiveTab('credits')}
+            className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-all flex items-center gap-1 ${activeTab === 'credits' ? 'bg-white dark:bg-ink-800 text-paper-900 dark:text-white shadow-sm' : 'text-paper-500 dark:text-ink-400 hover:text-paper-900 dark:hover:text-white'}`}
+          >
+            <Coins className="w-3 h-3" /> Credits
+          </button>
         </div>
       </div>
 
       {/* Tab 1: Profile & Identity Settings */}
       {activeTab === 'profile' && (
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 animate-fade-in">
+        <div className="space-y-6 animate-fade-in">
+          {/* Profile Hero Banner */}
+          <div 
+            className="bg-ink-950 dark:bg-black rounded-lg p-5 flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden border border-ink-800 shadow-sm min-h-[140px]"
+            style={{
+              backgroundImage: 'linear-gradient(rgba(10, 15, 20, 0.85), rgba(5, 8, 11, 0.95)), url("/profile_identity_banner.png")',
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+            }}
+          >
+            <div className="relative z-10 space-y-1.5 max-w-2xl">
+              <div className="flex items-center gap-1.5 text-coral-500 font-semibold text-[9.5px] uppercase tracking-wider">
+                <Building className="w-3.5 h-3.5" /> Organization Identity
+              </div>
+              <h2 className="text-lg font-bold text-white tracking-tight">Profile & Brand Settings</h2>
+              <p className="text-[11px] text-ink-300 leading-relaxed">
+                Manage your organization's legal name, unique username, logo, and public-facing metadata. Monitor portfolio statistics and geographic distribution.
+              </p>
+            </div>
+            <div className="relative z-10 flex gap-2 flex-shrink-0">
+              <div className="bg-ink-900/90 backdrop-blur-sm border border-ink-700/50 rounded-lg p-3.5 flex flex-col justify-center min-w-[200px]">
+                <div className="text-[9px] font-bold text-coral-500 mb-1 uppercase tracking-wide">Quick Stats</div>
+                <div className="space-y-1 mt-1 text-[11px] text-ink-300">
+                  <div>• {stats.totalUnits} total units managed</div>
+                  <div>• {stats.activeTenants} active tenants</div>
+                  <div>• {stats.occupancyRate} occupancy rate</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
           {/* Left Column - Core Identity & Stats */}
           <div className="xl:col-span-1 space-y-6">
             
@@ -687,6 +797,7 @@ export default function OrganizationPage() {
 
           </div>
         </div>
+        </div>
       )}
 
       {/* Tab 2: Members Directory & granular access management */}
@@ -857,96 +968,38 @@ export default function OrganizationPage() {
 
       {/* Tab 3: Predefined Roles Matrix */}
       {activeTab === 'roles' && (
-        <div className="bg-white dark:bg-ink-800 border border-paper-200 dark:border-ink-700 rounded-lg p-5 space-y-6 animate-fade-in shadow-sm">
-          <div>
-            <h3 className="text-sm font-semibold text-paper-900 dark:text-white">Preset Roles Permissions Matrix</h3>
-            <p className="text-[11.5px] text-paper-500 dark:text-ink-400 mt-1 leading-relaxed">
-              Dane Properties handles access configurations using structured security templates. Below are the defaults populated when assigning a preset role.
-            </p>
-          </div>
+        <RolesMatrixTab />
+      )}
 
-          <div className="overflow-x-auto border border-paper-200 dark:border-ink-700 rounded-md">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-paper-50 dark:bg-ink-950/20 text-[9.5px] uppercase font-bold text-paper-500 dark:text-ink-400 tracking-wider">
-                <tr>
-                  <th className="px-4 py-3 border-b border-paper-200 dark:border-ink-700">Predefined Role</th>
-                  <th className="px-4 py-3 border-b border-paper-200 dark:border-ink-700">Capabilities Description</th>
-                  <th className="px-4 py-3 border-b border-paper-200 dark:border-ink-700">Financial Ledger Access</th>
-                  <th className="px-4 py-3 border-b border-paper-200 dark:border-ink-700">Portfolio Scoping</th>
-                  <th className="px-4 py-3 border-b border-paper-200 dark:border-ink-700">Security Control</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-paper-100 dark:divide-ink-700/50">
-                <tr>
-                  <td className="px-4 py-3.5 font-bold text-paper-900 dark:text-white flex items-center gap-1.5">
-                    <Shield className="w-3.5 h-3.5 text-coral-500" /> Owner / Landlord
-                  </td>
-                  <td className="px-4 py-3.5 text-paper-600 dark:text-ink-300">
-                    Root organization creator. Full capabilities across all modules. Can delete organization.
-                  </td>
-                  <td className="px-4 py-3.5 text-green-600 dark:text-green-400 font-semibold uppercase tracking-wider text-[10px]">Full Access</td>
-                  <td className="px-4 py-3.5 font-medium">Global (All properties)</td>
-                  <td className="px-4 py-3.5 text-green-600 dark:text-green-400 font-semibold uppercase tracking-wider text-[10px]">Root Leader</td>
-                </tr>
-                <tr>
-                  <td className="px-4 py-3.5 font-bold text-paper-900 dark:text-white flex items-center gap-1.5">
-                    <ShieldAlert className="w-3.5 h-3.5 text-purple-500" /> Operations Lead
-                  </td>
-                  <td className="px-4 py-3.5 text-paper-600 dark:text-ink-300">
-                    Full administrative privileges. Manage other members' roles, property listings, leases, and system templates.
-                  </td>
-                  <td className="px-4 py-3.5 text-green-600 dark:text-green-400 font-semibold uppercase tracking-wider text-[10px]">Full Access</td>
-                  <td className="px-4 py-3.5 font-medium">Global or Scoped</td>
-                  <td className="px-4 py-3.5 text-green-600 dark:text-green-400 font-semibold uppercase tracking-wider text-[10px]">Admin Privileges</td>
-                </tr>
-                <tr>
-                  <td className="px-4 py-3.5 font-bold text-paper-900 dark:text-white flex items-center gap-1.5">
-                    <Settings className="w-3.5 h-3.5 text-blue-500" /> Property Manager
-                  </td>
-                  <td className="px-4 py-3.5 text-paper-600 dark:text-ink-300">
-                    Day-to-day operations. Add tenants, edit property details, send broadcasts, and assign maintenance contractors.
-                  </td>
-                  <td className="px-4 py-3.5 text-amber-600 dark:text-amber-400 font-semibold uppercase tracking-wider text-[10px]">Read-Only</td>
-                  <td className="px-4 py-3.5 font-medium">Global or Scoped</td>
-                  <td className="px-4 py-3.5 text-red-500 dark:text-red-400/80 font-semibold uppercase tracking-wider text-[10px]">Blocked</td>
-                </tr>
-                <tr>
-                  <td className="px-4 py-3.5 font-bold text-paper-900 dark:text-white flex items-center gap-1.5">
-                    <Wrench className="w-3.5 h-3.5 text-orange-500" /> Maintenance Tech
-                  </td>
-                  <td className="px-4 py-3.5 text-paper-600 dark:text-ink-300">
-                    Operational tech focus. Full access on ticket assignment and contractor directory. Read-only to properties.
-                  </td>
-                  <td className="px-4 py-3.5 text-red-500 dark:text-red-400/80 font-semibold uppercase tracking-wider text-[10px]">Blocked</td>
-                  <td className="px-4 py-3.5 font-medium">Scoped properties only</td>
-                  <td className="px-4 py-3.5 text-red-500 dark:text-red-400/80 font-semibold uppercase tracking-wider text-[10px]">Blocked</td>
-                </tr>
-                <tr>
-                  <td className="px-4 py-3.5 font-bold text-paper-900 dark:text-white flex items-center gap-1.5">
-                    <Wallet className="w-3.5 h-3.5 text-emerald-500" /> Accountant
-                  </td>
-                  <td className="px-4 py-3.5 text-paper-600 dark:text-ink-300">
-                    Financial auditing. View ledgers, process payments, issue refunds. Read-only to properties & tenants.
-                  </td>
-                  <td className="px-4 py-3.5 text-green-600 dark:text-green-400 font-semibold uppercase tracking-wider text-[10px]">Full Access</td>
-                  <td className="px-4 py-3.5 font-medium">Global (All properties)</td>
-                  <td className="px-4 py-3.5 text-red-500 dark:text-red-400/80 font-semibold uppercase tracking-wider text-[10px]">Blocked</td>
-                </tr>
-                <tr>
-                  <td className="px-4 py-3.5 font-bold text-paper-900 dark:text-white flex items-center gap-1.5">
-                    <Lock className="w-3.5 h-3.5 text-paper-500" /> Landlord (Read-Only)
-                  </td>
-                  <td className="px-4 py-3.5 text-paper-600 dark:text-ink-300">
-                    Auditing partner access. Read-only capability across all properties, tenants, and maintenance lists.
-                  </td>
-                  <td className="px-4 py-3.5 text-amber-600 dark:text-amber-400 font-semibold uppercase tracking-wider text-[10px]">Read-Only</td>
-                  <td className="px-4 py-3.5 font-medium">Global or Scoped</td>
-                  <td className="px-4 py-3.5 text-red-500 dark:text-red-400/80 font-semibold uppercase tracking-wider text-[10px]">Blocked</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
+      {/* Tab 4: Billing & Subscriptions Tab */}
+      {activeTab === 'subscription' && (
+        <SubscriptionTab
+          billingData={billingData}
+          billingLoading={billingLoading}
+          handleCancelPremium={handleCancelPremium}
+          billingMessage={billingMessage}
+          setBillingMessage={setBillingMessage}
+          onRefresh={fetchBillingInfo}
+        />
+      )}
+
+      {activeTab === 'credits' && (
+        <CreditsWalletTab
+          billingData={billingData}
+          billingLoading={billingLoading}
+          dateFilterStart={dateFilterStart}
+          setDateFilterStart={setDateFilterStart}
+          dateFilterEnd={dateFilterEnd}
+          setDateFilterEnd={setDateFilterEnd}
+          selectedTeammateFilter={selectedTeammateFilter}
+          setSelectedTeammateFilter={setSelectedTeammateFilter}
+          teamMembers={teamMembers}
+          creditRechargeAmount={creditRechargeAmount}
+          setCreditRechargeAmount={setCreditRechargeAmount}
+          billingMessage={billingMessage}
+          setBillingMessage={setBillingMessage}
+          onRefresh={fetchBillingInfo}
+        />
       )}
 
       {/* Edit Member Access Modal */}

@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import * as schema from '../../db/schema';
-import { checkToolPermission } from './permissions';
+import { getToolPermissionError } from './permissions';
 
 export interface CreatePropertyArgs {
   name: string;
@@ -22,8 +22,9 @@ export class CreatePropertyTool {
     const { db, userId, user } = context;
 
     // Check permissions
-    if (user && !checkToolPermission(user, 'Properties', 'List New')) {
-      return { success: false, error: 'Access Denied: You do not have permission to list new properties.' };
+    if (user) {
+      const permError = getToolPermissionError(user, 'Properties', 'List New');
+      if (permError) return { success: false, error: permError };
     }
 
     const name = args.name;
@@ -37,6 +38,7 @@ export class CreatePropertyTool {
 
     try {
       const userExist = await db.select().from(schema.users).where(eq(schema.users.id, userId)).limit(1);
+      const orgId = userExist[0]?.organizationId || null;
       const orgName = userExist[0]?.organizationName || null;
 
       const propertyId = 'prop-' + Math.random().toString(36).substring(2, 9);
@@ -45,6 +47,7 @@ export class CreatePropertyTool {
         name,
         address,
         ownerId: userId,
+        organizationId: orgId,
         organizationName: orgName,
         unitsCount,
         status: 'pending',
@@ -55,6 +58,7 @@ export class CreatePropertyTool {
       await db.insert(schema.auditLogs).values({
         id: 'audit-' + Math.random().toString(36).substring(2, 9),
         ownerId: userId,
+        organizationId: orgId,
         organizationName: orgName,
         actorName: 'Sophia AI',
         actorEmail: 'sophia@landlord.nl',

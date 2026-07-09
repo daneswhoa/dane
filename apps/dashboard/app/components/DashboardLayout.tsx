@@ -10,6 +10,7 @@ import { io } from 'socket.io-client';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 import ProfileSettingsModal from './ProfileSettingsModal';
+import SophiaFloatingWidget from './sophia/SophiaFloatingWidget';
 
 interface SidebarMetrics {
   properties: { count: number; hasPending: boolean };
@@ -54,7 +55,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     fetchProfile();
   }, [session]);
 
-  // Sync client-side navigation logging to LocalStorage
+  // Sync client-side navigation logging and capture UI actions
   useEffect(() => {
     if (typeof window !== 'undefined' && pathname) {
       try {
@@ -71,11 +72,25 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           // Cap at 30 items
           localStorage.setItem('sophia_navigation_history', JSON.stringify(history.slice(-30)));
         }
+        
+        // Track navigation as a UI action
+        localStorage.setItem('sophia_last_ui_action', `Navigated to ${pathname}`);
       } catch (e) {
         console.error('Error logging navigation history:', e);
       }
     }
   }, [pathname]);
+
+  // Global event listener for custom UI actions
+  useEffect(() => {
+    const handleUIAction = (e: any) => {
+      if (e.detail?.action) {
+        localStorage.setItem('sophia_last_ui_action', e.detail.action);
+      }
+    };
+    window.addEventListener('sophia-ui-action', handleUIAction);
+    return () => window.removeEventListener('sophia-ui-action', handleUIAction);
+  }, []);
 
   // Connect to Sophia's WebSocket event gateway
   useEffect(() => {
@@ -385,6 +400,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         return ['Agent Workspace', 'Sophia AI'];
       case 'properties':
         return ['Core', 'Properties'];
+      case 'syndication':
+        return ['Marketing', 'Global Syndication'];
       case 'tenants':
         return ['Core', 'Tenants'];
       case 'expenses':
@@ -411,6 +428,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         return ['Administration', 'Security & Audit'];
       case 'team':
         return ['Administration', 'Organization'];
+      case 'support':
+        return ['Administration', 'Support & Help'];
       case 'settings':
         return ['Settings', 'System Configuration'];
       default:
@@ -496,6 +515,9 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           onSignOut={handleSignOut}
         />
       )}
+
+      {/* Global Sophia Floating Assistant Widget */}
+      <SophiaFloatingWidget />
     </div>
   );
 }

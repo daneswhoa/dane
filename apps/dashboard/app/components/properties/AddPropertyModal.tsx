@@ -16,6 +16,7 @@ export function AddPropertyModal({ onClose, onSuccess }: AddPropertyModalProps) 
   const [address, setAddress] = useState('');
   const [photoUrl, setPhotoUrl] = useState('');
   const [unitsCount, setUnitsCount] = useState(4);
+  const [currency, setCurrency] = useState('USD');
   
   const [isUploading, setIsUploading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -88,6 +89,7 @@ export function AddPropertyModal({ onClose, onSuccess }: AddPropertyModalProps) 
           address,
           photoUrl: photoUrl || null,
           unitsCount: isMultiUnit ? Number(unitsCount) : 1,
+          currency,
         }),
         credentials: 'include',
       });
@@ -265,6 +267,22 @@ export function AddPropertyModal({ onClose, onSuccess }: AddPropertyModalProps) 
                   onChange={(e) => setAddress(e.target.value)}
                   className="w-full px-3 py-2 text-xs border border-paper-250 dark:border-ink-700 rounded bg-white dark:bg-ink-900 text-paper-900 dark:text-white focus:outline-none focus:border-coral-500 focus:ring-1 focus:ring-coral-500 transition-all"
                 />
+              </div>
+
+              {/* Currency */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-paper-500 dark:text-ink-400 uppercase tracking-wider block">
+                  Currency
+                </label>
+                <select
+                  value={currency}
+                  onChange={(e) => setCurrency(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-paper-250 dark:border-ink-700 rounded bg-white dark:bg-ink-900 text-paper-900 dark:text-white focus:outline-none focus:border-coral-500 focus:ring-1 focus:ring-coral-500 transition-all"
+                >
+                  <option value="USD">USD ($)</option>
+                  <option value="EUR">Euro (€)</option>
+                  <option value="KES">Kenyan Shilling (KES)</option>
+                </select>
               </div>
 
               {/* GCS Photo Upload zone */}

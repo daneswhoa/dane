@@ -1,28 +1,17 @@
 import { Controller, Post, Body, UseInterceptors, UploadedFile, BadRequestException, UseGuards, Req, Inject, Get, Patch, Delete, Param } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { users, todos } from './db/schema';
+import { users, todos, organizations } from './db/schema';
 import { eq, and, desc } from 'drizzle-orm';
-import { Storage } from '@google-cloud/storage';
 import { SessionGuard } from './auth/auth.guard';
 import { DATABASE_CONNECTION } from './db/database.module';
-
-let storage: Storage | null = null;
-try {
-  if (process.env.GCP_CREDENTIALS) {
-    storage = new Storage({ credentials: JSON.parse(process.env.GCP_CREDENTIALS) });
-  } else {
-    storage = new Storage();
-  }
-} catch (e) {
-  console.log('GCS not configured, will skip actual upload if no credentials.', e);
-}
-const bucketName = process.env.GCS_BUCKET_NAME || 'landlordnl-assets';
+import { R2Service } from './r2/r2.service';
 
 @Controller('dashboard')
 @UseGuards(SessionGuard)
 export class DashboardController {
   constructor(
-    @Inject(DATABASE_CONNECTION) private readonly db: any
+    @Inject(DATABASE_CONNECTION) private readonly db: any,
+    private readonly r2Service: R2Service
   ) {}
   
   @Post('setup')
@@ -50,25 +39,32 @@ export class DashboardController {
     }
 
     let logoUrl = null;
-    if (file && storage) {
+    if (file) {
       try {
-        const bucket = storage.bucket(bucketName);
-        const fileName = `logos/${sessionUserId}-${Date.now()}-${file.originalname}`;
-        const blob = bucket.file(fileName);
-        
-        await blob.save(file.buffer, {
-          contentType: file.mimetype,
-          resumable: false,
-        });
-        
-        logoUrl = `https://storage.googleapis.com/${bucketName}/${fileName}`;
+        const safeName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
+        const fileName = `logos/${sessionUserId}-${Date.now()}-${safeName}`;
+        logoUrl = await this.r2Service.uploadFile(file.buffer, fileName, file.mimetype);
       } catch (error) {
-        console.error('GCS Upload Error:', error);
+        console.error('R2 Upload Error:', error);
       }
     }
 
+    // Check if organization name is already taken
+    const existingOrg = await this.db.select().from(organizations).where(eq(organizations.name, organizationName.trim())).limit(1);
+    if (existingOrg.length > 0) {
+      throw new BadRequestException('An organization with this name already exists.');
+    }
+
+    const orgId = 'org-' + Math.random().toString(36).substring(2, 9);
+    await this.db.insert(organizations).values({
+      id: orgId,
+      name: organizationName.trim(),
+      logoUrl: logoUrl || null,
+    });
+
     // Update user in DB
     const updateData: any = {
+      organizationId: orgId,
       organizationName,
       username,
     };

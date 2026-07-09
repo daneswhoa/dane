@@ -52,7 +52,7 @@ export class TenantsController {
         .where(
           and(
             eq(schema.users.role, 'tenant'),
-            eq(schema.properties.organizationName, req.user.organizationName || '')
+            eq(schema.properties.organizationId, req.user.organizationId || '')
           )
         );
 
@@ -119,10 +119,13 @@ export class TenantsController {
           deposit: schema.units.deposit,
           moveInFees: schema.units.moveInFees,
           recurringFees: schema.units.recurringFees,
+          floor: schema.units.floor,
+          unitType: schema.units.unitType,
           propertyId: schema.properties.id,
           propertyName: schema.properties.name,
           propertyAddress: schema.properties.address,
           ownerId: schema.properties.ownerId,
+          currency: schema.properties.currency,
         })
         .from(schema.units)
         .leftJoin(schema.properties, eq(schema.units.propertyId, schema.properties.id))
@@ -187,42 +190,59 @@ export class TenantsController {
         }
       });
 
-      const latestTicketList = await this.db.select()
+      const ticketsList = await this.db.select()
         .from(schema.tickets)
         .where(eq(schema.tickets.tenantId, targetUserId))
-        .orderBy(desc(schema.tickets.createdAt))
-        .limit(1);
+        .orderBy(desc(schema.tickets.createdAt));
       
-      const latestTicket = latestTicketList.length > 0 ? {
-        id: latestTicketList[0].id,
-        title: latestTicketList[0].title,
-        description: latestTicketList[0].description,
-        status: latestTicketList[0].status,
-        createdAt: latestTicketList[0].createdAt ? new Date(latestTicketList[0].createdAt).toISOString() : '',
-      } : null;
+      const tickets = ticketsList.map((t: any) => ({
+        id: t.id,
+        title: t.title || 'Untitled Ticket',
+        description: t.description,
+        status: t.status,
+        urgency: t.urgency || 'medium',
+        createdAt: t.createdAt ? new Date(t.createdAt).toISOString() : '',
+      }));
+
+      const latestTicket = tickets.length > 0 ? tickets[0] : null;
 
       return {
         id: user.id,
         name: user.name,
         email: user.email,
         phone: user.phone || '',
+        idNumber: user.idNumber || '',
         photoUrl: user.image || '',
         unit: unitInfo ? `Unit ${unitInfo.unitLabel}` : '',
         unitId: unitInfo ? unitInfo.unitId : '',
+        unitName: unitInfo ? unitInfo.unitLabel : '',
+        floor: unitInfo ? unitInfo.floor || '1' : '1',
+        unitType: unitInfo ? unitInfo.unitType || 'Residential' : 'Residential',
+        rent: unitInfo ? Number(unitInfo.rent || 0) : 0,
+        deposit: unitInfo ? Number(unitInfo.deposit || 0) : 0,
+        moveInFees: unitInfo ? Number(unitInfo.moveInFees || 0) : 0,
+        recurringFees: unitInfo ? Number(unitInfo.recurringFees || 0) : 0,
         building: unitInfo ? unitInfo.propertyName : '',
+        propertyName: unitInfo ? unitInfo.propertyName : 'Residential Roster',
+        propertyAddress: unitInfo ? unitInfo.propertyAddress : '',
         propertyId: unitInfo ? unitInfo.propertyId : '',
         ownerId: unitInfo ? unitInfo.ownerId : '',
+        currency: unitInfo ? unitInfo.currency || 'USD' : 'USD',
         moveInDate: user.leaseStart ? new Date(user.leaseStart).toISOString().split('T')[0] : '',
+        leaseStart: user.leaseStart ? new Date(user.leaseStart).toISOString().split('T')[0] : '',
         leaseEnd: user.leaseEnd ? new Date(user.leaseEnd).toISOString().split('T')[0] : '',
         autopayEnabled: false,
         emergencyContacts,
         nextOfKin,
+        kins: emergencyContacts.concat(nextOfKin),
         managerName,
         managerEmail,
         managerPhone,
         owedAmount,
+        arrears: owedAmount,
         rentDueDate,
         latestTicket,
+        tickets,
       };
     } catch (err: any) {
       throw new InternalServerErrorException(`Failed to retrieve tenant profile: ${err.message}`);
@@ -300,6 +320,7 @@ export class TenantsController {
       await this.db.insert(schema.invitations).values({
         id: inviteCode,
         ownerId,
+        organizationId: req.user.organizationId || null,
         organizationName: req.user.organizationName || null,
         propertyId: body.propertyId,
         unitId: body.unitId,
@@ -580,6 +601,7 @@ export class TenantsController {
           unitId: invite.unitId,
           propertyId: invite.propertyId,
           ownerId: invite.ownerId,
+          organizationId: invite.organizationId || null,
           organizationName: invite.organizationName || null,
           amount: totalAmount,
           description: invoiceDescription.trim(),
@@ -672,6 +694,9 @@ export class TenantsController {
             id: schema.units.id,
             status: schema.units.status,
             label: schema.units.label,
+            rent: schema.units.rent,
+            arrears: schema.units.arrears,
+            tenantId: schema.units.tenantId,
             propertyId: schema.units.propertyId,
             propertyName: schema.properties.name,
             ownerId: schema.properties.ownerId,
@@ -702,11 +727,7 @@ export class TenantsController {
           throw new BadRequestException('Access denied. You do not manage the property of the destination unit.');
         }
 
-        if (destUnit.status !== 'vacant') {
-          throw new BadRequestException('Destination unit is not vacant.');
-        }
-
-        // 3. Find tenant
+        // 3. Find source tenant
         const tenantList = await tx
           .select()
           .from(schema.users)
@@ -719,50 +740,313 @@ export class TenantsController {
 
         const tenant = tenantList[0];
 
-        // 4. Set former unit of tenant to vacant
+        // 4. Find source tenant's former unit
         const formerUnitList = await tx
           .select({
             id: schema.units.id,
             label: schema.units.label,
+            rent: schema.units.rent,
+            arrears: schema.units.arrears,
+            tenantId: schema.units.tenantId,
+            propertyId: schema.units.propertyId,
             propertyName: schema.properties.name,
           })
           .from(schema.units)
           .innerJoin(schema.properties, eq(schema.units.propertyId, schema.properties.id))
-          .where(eq(schema.units.tenantId, body.tenantId));
+          .where(eq(schema.units.tenantId, body.tenantId))
+          .limit(1);
 
-        for (const u of formerUnitList) {
-          await tx
-            .update(schema.units)
-            .set({ tenantId: null, status: 'vacant' })
-            .where(eq(schema.units.id, u.id));
+        const formerUnit = formerUnitList[0] || null;
+
+        // Check if destination is occupied -> SWAP
+        const isSwap = destUnit.tenantId !== null && destUnit.tenantId !== body.tenantId;
+
+        if (isSwap) {
+          if (!formerUnit) {
+            throw new BadRequestException('Cannot swap because the source tenant is not currently assigned to a unit.');
+          }
+
+          const destTenantId = destUnit.tenantId!;
+          const destTenantList = await tx
+            .select()
+            .from(schema.users)
+            .where(eq(schema.users.id, destTenantId))
+            .limit(1);
+
+          if (destTenantList.length === 0) {
+            throw new BadRequestException('Occupant of destination unit not found.');
+          }
+          const destTenant = destTenantList[0];
+
+          // Swap tenants on units
+          await tx.update(schema.units)
+            .set({ tenantId: destTenantId, status: 'occupied', arrears: destUnit.arrears })
+            .where(eq(schema.units.id, formerUnit.id));
+
+          await tx.update(schema.units)
+            .set({ tenantId: body.tenantId, status: 'occupied', arrears: formerUnit.arrears })
+            .where(eq(schema.units.id, destUnit.id));
+
+          // Update unpaid invoices
+          await tx.update(schema.invoices)
+            .set({ unitId: destUnit.id, propertyId: destUnit.propertyId })
+            .where(and(eq(schema.invoices.tenantId, body.tenantId), eq(schema.invoices.status, 'unpaid')));
+
+          await tx.update(schema.invoices)
+            .set({ unitId: formerUnit.id, propertyId: formerUnit.propertyId })
+            .where(and(eq(schema.invoices.tenantId, destTenantId), eq(schema.invoices.status, 'unpaid')));
+
+          // Swap leases
+          await tx.update(schema.leases)
+            .set({ status: 'ended', endDate: new Date() })
+            .where(and(eq(schema.leases.tenantId, body.tenantId), eq(schema.leases.status, 'active')));
+
+          await tx.update(schema.leases)
+            .set({ status: 'ended', endDate: new Date() })
+            .where(and(eq(schema.leases.tenantId, destTenantId), eq(schema.leases.status, 'active')));
+
+          await tx.insert(schema.leases).values({
+            id: 'lease-' + Math.random().toString(36).substring(2, 9),
+            tenantId: body.tenantId,
+            propertyId: destUnit.propertyId,
+            unitId: destUnit.id,
+            startDate: new Date(),
+            endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+            status: 'active',
+          });
+
+          await tx.insert(schema.leases).values({
+            id: 'lease-' + Math.random().toString(36).substring(2, 9),
+            tenantId: destTenantId,
+            propertyId: formerUnit.propertyId,
+            unitId: formerUnit.id,
+            startDate: new Date(),
+            endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+            status: 'active',
+          });
+
+          // Rent difference billing on upgrades
+          let tenantDiffInvoiceCode = '';
+          const destRent = Number(destUnit.rent || 0);
+          const formerRent = Number(formerUnit.rent || 0);
+
+          if (destRent > formerRent) {
+            const diff = destRent - formerRent;
+            const invoiceId = 'inv-' + Math.random().toString(36).substring(2, 9);
+            tenantDiffInvoiceCode = 'INV-' + Math.floor(100000 + Math.random() * 900000);
+
+            await tx.insert(schema.invoices).values({
+              id: invoiceId,
+              invoiceNumber: tenantDiffInvoiceCode,
+              type: 'Rent Difference (Upgrade)',
+              tenantId: body.tenantId,
+              tenantEmail: tenant.email,
+              tenantName: tenant.name,
+              unitId: destUnit.id,
+              propertyId: destUnit.propertyId,
+              ownerId: targetOwnerId,
+              organizationId: tenant.organizationId || null,
+              organizationName: tenant.organizationName || null,
+              amount: diff,
+              description: `Rent difference for upgrading from Unit ${formerUnit.label} ($${formerRent}/mo) to Unit ${destUnit.label} ($${destRent}/mo).`,
+              status: 'unpaid',
+              dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+            });
+
+            const newArrears = Number(formerUnit.arrears || 0) + diff;
+            await tx.update(schema.units)
+              .set({ arrears: newArrears })
+              .where(eq(schema.units.id, destUnit.id));
+          }
+
+          let destTenantDiffInvoiceCode = '';
+          if (formerRent > destRent) {
+            const diff = formerRent - destRent;
+            const invoiceId = 'inv-' + Math.random().toString(36).substring(2, 9);
+            destTenantDiffInvoiceCode = 'INV-' + Math.floor(100000 + Math.random() * 900000);
+
+            await tx.insert(schema.invoices).values({
+              id: invoiceId,
+              invoiceNumber: destTenantDiffInvoiceCode,
+              type: 'Rent Difference (Upgrade)',
+              tenantId: destTenantId,
+              tenantEmail: destTenant.email,
+              tenantName: destTenant.name,
+              unitId: formerUnit.id,
+              propertyId: formerUnit.propertyId,
+              ownerId: targetOwnerId,
+              organizationId: destTenant.organizationId || null,
+              organizationName: destTenant.organizationName || null,
+              amount: diff,
+              description: `Rent difference for upgrading from Unit ${destUnit.label} ($${destRent}/mo) to Unit ${formerUnit.label} ($${formerRent}/mo).`,
+              status: 'unpaid',
+              dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+            });
+
+            const newArrears = Number(destUnit.arrears || 0) + diff;
+            await tx.update(schema.units)
+              .set({ arrears: newArrears })
+              .where(eq(schema.units.id, formerUnit.id));
+          }
+
+          // Realtime Notifications
+          await this.realtimeService.sendNotification(
+            body.tenantId,
+            'Unit Swapped!',
+            `You have been swapped to Unit ${destUnit.label}. Your lease, arrears, and unpaid invoices have been transferred.${tenantDiffInvoiceCode ? ` An upgrade invoice ${tenantDiffInvoiceCode} has been generated for the rent difference.` : ''}`,
+            `/tenant/payments`,
+            true
+          );
+
+          await this.realtimeService.sendNotification(
+            destTenantId,
+            'Unit Swapped!',
+            `You have been swapped to Unit ${formerUnit.label}. Your lease, arrears, and unpaid invoices have been transferred.${destTenantDiffInvoiceCode ? ` An upgrade invoice ${destTenantDiffInvoiceCode} has been generated for the rent difference.` : ''}`,
+            `/tenant/payments`,
+            true
+          );
+
+          // Audit Log
+          await tx.insert(schema.auditLogs).values({
+            id: 'audit-' + Math.random().toString(36).substring(2, 9),
+            ownerId: targetOwnerId,
+            actorName: req.user.name || 'Owner',
+            actorEmail: req.user.email,
+            actorInitials: (req.user.name || 'OW').split(' ').map((n: string) => n[0]).join('').toUpperCase(),
+            categoryIconName: 'UserCheck',
+            categoryLabel: 'Tenants',
+            description: `Swapped tenants: "${tenant.name}" moved to Unit ${destUnit.label} & "${destTenant.name}" moved to Unit ${formerUnit.label}.`,
+            severity: 'info',
+            status: 'success',
+            ip: req.ip || 'Unknown',
+            location: 'Unknown',
+          });
+
+          return {
+            success: true,
+            message: `Swapped tenant ${tenant.name} to Unit ${destUnit.label} and tenant ${destTenant.name} to Unit ${formerUnit.label} successfully.`
+          };
+        } else {
+          // NORMAL MOVE (Vacant Destination)
+          if (formerUnit) {
+            // Vacate former unit
+            await tx.update(schema.units)
+              .set({ tenantId: null, status: 'vacant', arrears: 0 })
+              .where(eq(schema.units.id, formerUnit.id));
+
+            // Set new unit, transferring arrears
+            const targetArrears = Number(formerUnit.arrears || 0);
+            await tx.update(schema.units)
+              .set({ tenantId: body.tenantId, status: 'occupied', arrears: targetArrears })
+              .where(eq(schema.units.id, destUnit.id));
+
+            // Update unpaid invoices
+            await tx.update(schema.invoices)
+              .set({ unitId: destUnit.id, propertyId: destUnit.propertyId })
+              .where(and(eq(schema.invoices.tenantId, body.tenantId), eq(schema.invoices.status, 'unpaid')));
+
+            // End active lease and start new one
+            await tx.update(schema.leases)
+              .set({ status: 'ended', endDate: new Date() })
+              .where(and(eq(schema.leases.tenantId, body.tenantId), eq(schema.leases.status, 'active')));
+
+            await tx.insert(schema.leases).values({
+              id: 'lease-' + Math.random().toString(36).substring(2, 9),
+              tenantId: body.tenantId,
+              propertyId: destUnit.propertyId,
+              unitId: destUnit.id,
+              startDate: new Date(),
+              endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+              status: 'active',
+            });
+
+            // Rent difference billing on upgrades
+            let diffInvoiceCode = '';
+            const destRent = Number(destUnit.rent || 0);
+            const formerRent = Number(formerUnit.rent || 0);
+
+            if (destRent > formerRent) {
+              const diff = destRent - formerRent;
+              const invoiceId = 'inv-' + Math.random().toString(36).substring(2, 9);
+              diffInvoiceCode = 'INV-' + Math.floor(100000 + Math.random() * 900000);
+
+              await tx.insert(schema.invoices).values({
+                id: invoiceId,
+                invoiceNumber: diffInvoiceCode,
+                type: 'Rent Difference (Upgrade)',
+                tenantId: body.tenantId,
+                tenantEmail: tenant.email,
+                tenantName: tenant.name,
+                unitId: destUnit.id,
+                propertyId: destUnit.propertyId,
+                ownerId: targetOwnerId,
+                organizationId: tenant.organizationId || null,
+                organizationName: tenant.organizationName || null,
+                amount: diff,
+                description: `Rent difference for upgrading from Unit ${formerUnit.label} ($${formerRent}/mo) to Unit ${destUnit.label} ($${destRent}/mo).`,
+                status: 'unpaid',
+                dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+              });
+
+              await tx.update(schema.units)
+                .set({ arrears: targetArrears + diff })
+                .where(eq(schema.units.id, destUnit.id));
+            }
+
+            // Realtime Notification
+            await this.realtimeService.sendNotification(
+              body.tenantId,
+              'Unit Reassigned!',
+              `You have been moved to Unit ${destUnit.label}. Your lease, arrears, and unpaid invoices have been transferred.${diffInvoiceCode ? ` An upgrade invoice ${diffInvoiceCode} has been generated for the rent difference.` : ''}`,
+              `/tenant/payments`,
+              true
+            );
+          } else {
+            // First time assigning a tenant to a unit (unassigned tenant)
+            await tx.update(schema.units)
+              .set({ tenantId: body.tenantId, status: 'occupied' })
+              .where(eq(schema.units.id, destUnit.id));
+
+            await tx.insert(schema.leases).values({
+              id: 'lease-' + Math.random().toString(36).substring(2, 9),
+              tenantId: body.tenantId,
+              propertyId: destUnit.propertyId,
+              unitId: destUnit.id,
+              startDate: new Date(),
+              endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+              status: 'active',
+            });
+
+            await this.realtimeService.sendNotification(
+              body.tenantId,
+              'Unit Assigned!',
+              `You have been assigned to Unit ${destUnit.label}.`,
+              `/tenant/payments`,
+              true
+            );
+          }
+
+          // Audit Log
+          await tx.insert(schema.auditLogs).values({
+            id: 'audit-' + Math.random().toString(36).substring(2, 9),
+            ownerId: targetOwnerId,
+            actorName: req.user.name || 'Owner',
+            actorEmail: req.user.email,
+            actorInitials: (req.user.name || 'OW').split(' ').map((n: string) => n[0]).join('').toUpperCase(),
+            categoryIconName: 'UserCheck',
+            categoryLabel: 'Tenants',
+            description: `Moved tenant "${tenant.name}" to property "${destUnit.propertyName}" Unit ${destUnit.label}.`,
+            severity: 'info',
+            status: 'success',
+            ip: req.ip || 'Unknown',
+            location: 'Unknown',
+          });
+
+          return {
+            success: true,
+            message: `Tenant ${tenant.name} moved to Unit ${destUnit.label} successfully.`
+          };
         }
-
-        // 5. Set new unit of tenant to occupied
-        await tx
-          .update(schema.units)
-          .set({ tenantId: body.tenantId, status: 'occupied' })
-          .where(eq(schema.units.id, body.unitId));
-
-        // 6. Log activity & audit log
-        await tx.insert(schema.auditLogs).values({
-          id: 'audit-' + Math.random().toString(36).substring(2, 9),
-          ownerId: targetOwnerId,
-          actorName: req.user.name || 'Owner',
-          actorEmail: req.user.email,
-          actorInitials: (req.user.name || 'OW').split(' ').map((n: string) => n[0]).join('').toUpperCase(),
-          categoryIconName: 'UserCheck',
-          categoryLabel: 'Tenants',
-          description: `Moved tenant "${tenant.name}" to property "${destUnit.propertyName}" Unit ${destUnit.label}.`,
-          severity: 'info',
-          status: 'success',
-          ip: req.ip || 'Unknown',
-          location: 'Unknown',
-        });
-
-        return {
-          success: true,
-          message: `Tenant ${tenant.name} moved to ${destUnit.propertyName} Unit ${destUnit.label} successfully.`
-        };
       });
     } catch (err: any) {
       if (err instanceof BadRequestException) throw err;
@@ -815,6 +1099,319 @@ export class TenantsController {
     } catch (err: any) {
       if (err instanceof BadRequestException) throw err;
       throw new InternalServerErrorException(`Failed to confirm leave: ${err.message}`);
+    }
+  }
+
+  @Post('tenants/:tenantId/email')
+  async sendTenantEmail(
+    @Req() req: any,
+    @Param('tenantId') tenantId: string,
+    @Body() body: { subject: string; message: string }
+  ) {
+    if (req.user.role === 'tenant') {
+      throw new BadRequestException('Access denied.');
+    }
+    if (!body.subject || !body.message) {
+      throw new BadRequestException('subject and message are required.');
+    }
+
+    try {
+      const tUser = await this.db.select().from(schema.users).where(eq(schema.users.id, tenantId)).limit(1);
+      if (tUser.length === 0) {
+        throw new BadRequestException('Tenant not found.');
+      }
+      
+      const tenant = tUser[0];
+      const senderName = req.user.name || 'Property Manager';
+      const senderOrg = req.user.organizationName || 'Dane Properties';
+
+      const emailHtml = `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 12px; background-color: #ffffff;">
+          <h2 style="color: #f43f5e; font-size: 18px; font-weight: bold; margin-bottom: 16px;">Notice from ${senderOrg}</h2>
+          <p style="font-size: 14px; color: #1f2937; white-space: pre-wrap; line-height: 1.5; margin-bottom: 24px;">
+            ${body.message}
+          </p>
+          <hr style="border: 0; border-top: 1px solid #f3f4f6; margin: 24px 0;" />
+          <p style="font-size: 12px; color: #9ca3af; line-height: 1.4;">
+            Best regards,<br/>
+            <strong>${senderName}</strong><br/>
+            ${senderOrg} Management Team
+          </p>
+        </div>
+      `;
+
+      await this.emailService.sendEmail(tenant.email, body.subject, emailHtml);
+      return { success: true };
+    } catch (err: any) {
+      throw new InternalServerErrorException(`Failed to send email notice: ${err.message}`);
+    }
+  }
+
+  @Post('tenants/add-direct')
+  async addDirectTenant(
+    @Req() req: any,
+    @Body() body: {
+      unitId: string;
+      name: string;
+      email: string;
+      phone: string;
+      idNumber?: string;
+      moveInDate?: string;
+      arrears?: number;
+      kins?: Array<{ name: string; relation: string; phone: string }>;
+      deposit?: number;
+      createInvoices?: boolean;
+    }
+  ) {
+    const db = this.db;
+    const callerId = req.user.id;
+    const callerRole = req.user.role;
+
+    if (callerRole === 'tenant') {
+      throw new BadRequestException('Access denied. Tenants cannot add other tenants.');
+    }
+
+    if (!body.unitId || !body.name || !body.email || !body.phone) {
+      throw new BadRequestException('unitId, name, email, and phone are required.');
+    }
+
+    try {
+      return await db.transaction(async (tx: any) => {
+        // 1. Verify unit exists and is vacant
+        const unitList = await tx
+          .select()
+          .from(schema.units)
+          .where(eq(schema.units.id, body.unitId))
+          .limit(1);
+
+        if (unitList.length === 0) {
+          throw new BadRequestException('Unit not found.');
+        }
+
+        const unit = unitList[0];
+        if (unit.status !== 'vacant') {
+          throw new BadRequestException('Unit is not vacant.');
+        }
+
+        // 2. Find or create the user
+        let tenantUser = null;
+        const normalizedEmail = body.email.toLowerCase().trim();
+        const userList = await tx
+          .select()
+          .from(schema.users)
+          .where(eq(schema.users.email, normalizedEmail))
+          .limit(1);
+
+        if (userList.length > 0) {
+          tenantUser = userList[0];
+          // update user details
+          await tx
+            .update(schema.users)
+            .set({
+              name: body.name,
+              phone: body.phone,
+              idNumber: body.idNumber || tenantUser.idNumber,
+              kinDetails: body.kins || tenantUser.kinDetails,
+            })
+            .where(eq(schema.users.id, tenantUser.id));
+        } else {
+          const newUserId = 'usr-' + Math.random().toString(36).substring(2, 9);
+          await tx.insert(schema.users).values({
+            id: newUserId,
+            email: normalizedEmail,
+            name: body.name,
+            phone: body.phone,
+            role: 'tenant',
+            idNumber: body.idNumber || null,
+            kinDetails: body.kins || null,
+          });
+          tenantUser = { id: newUserId, email: normalizedEmail, name: body.name };
+        }
+
+        // 3. Update unit fields
+        // Calculate the target arrears. Start with body.arrears (default 0).
+        let targetArrears = Number(body.arrears || 0);
+
+        // If createInvoices is true, we will generate invoices.
+        // Unpaid invoices are added to the unit arrears.
+        if (body.createInvoices) {
+          if (body.deposit !== undefined && Number(body.deposit) > 0) {
+            targetArrears += Number(body.deposit);
+          }
+          if (Number(unit.rent) > 0) {
+            targetArrears += Number(unit.rent);
+          }
+          if (Number(unit.moveInFees) > 0) {
+            targetArrears += Number(unit.moveInFees);
+          }
+          if (Number(unit.recurringFees) > 0) {
+            targetArrears += Number(unit.recurringFees);
+          }
+        }
+
+        const depositVal = body.deposit !== undefined ? Number(body.deposit) : Number(unit.rent || 0);
+
+        await tx
+          .update(schema.units)
+          .set({
+            tenantId: tenantUser.id,
+            status: 'occupied',
+            arrears: targetArrears,
+            deposit: depositVal,
+          })
+          .where(eq(schema.units.id, unit.id));
+
+        // 4. Create active lease
+        await tx.insert(schema.leases).values({
+          id: 'lease-' + Math.random().toString(36).substring(2, 9),
+          tenantId: tenantUser.id,
+          propertyId: unit.propertyId,
+          unitId: unit.id,
+          startDate: body.moveInDate ? new Date(body.moveInDate) : new Date(),
+          endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+          status: 'active',
+        });
+
+        // 5. Generate invoices
+        const orgId = req.user.organizationId || null;
+        const orgName = req.user.organizationName || 'Dane Properties';
+        const invoiceDueDate = body.moveInDate ? new Date(body.moveInDate) : new Date();
+
+        // 5.1 If starting arrears > 0, generate an Arrears invoice
+        if (Number(body.arrears || 0) > 0) {
+          const invId = 'inv-' + Math.random().toString(36).substring(2, 9);
+          const invNum = 'INV-' + Math.floor(100000 + Math.random() * 900000);
+          await tx.insert(schema.invoices).values({
+            id: invId,
+            invoiceNumber: invNum,
+            type: 'Arrears',
+            tenantId: tenantUser.id,
+            tenantEmail: normalizedEmail,
+            tenantName: body.name,
+            unitId: unit.id,
+            propertyId: unit.propertyId,
+            ownerId: callerId,
+            organizationId: orgId,
+            organizationName: orgName,
+            amount: Number(body.arrears),
+            description: 'Outstanding arrears balance imported on tenant move-in',
+            status: 'unpaid',
+            dueDate: invoiceDueDate,
+          });
+        }
+
+        // 5.2 If createInvoices is true, generate invoices for deposit, rent, etc.
+        if (body.createInvoices) {
+          if (body.deposit !== undefined && Number(body.deposit) > 0) {
+            const invId = 'inv-' + Math.random().toString(36).substring(2, 9);
+            const invNum = 'INV-' + Math.floor(100000 + Math.random() * 900000);
+            await tx.insert(schema.invoices).values({
+              id: invId,
+              invoiceNumber: invNum,
+              type: 'Deposit',
+              tenantId: tenantUser.id,
+              tenantEmail: normalizedEmail,
+              tenantName: body.name,
+              unitId: unit.id,
+              propertyId: unit.propertyId,
+              ownerId: callerId,
+              organizationId: orgId,
+              organizationName: orgName,
+              amount: Number(body.deposit),
+              description: 'Security Deposit',
+              status: 'unpaid',
+              dueDate: invoiceDueDate,
+            });
+          }
+          if (Number(unit.rent) > 0) {
+            const invId = 'inv-' + Math.random().toString(36).substring(2, 9);
+            const invNum = 'INV-' + Math.floor(100000 + Math.random() * 900000);
+            await tx.insert(schema.invoices).values({
+              id: invId,
+              invoiceNumber: invNum,
+              type: 'Rent',
+              tenantId: tenantUser.id,
+              tenantEmail: normalizedEmail,
+              tenantName: body.name,
+              unitId: unit.id,
+              propertyId: unit.propertyId,
+              ownerId: callerId,
+              organizationId: orgId,
+              organizationName: orgName,
+              amount: Number(unit.rent),
+              description: 'First Month Rent',
+              status: 'unpaid',
+              dueDate: invoiceDueDate,
+            });
+          }
+          if (Number(unit.moveInFees) > 0) {
+            const invId = 'inv-' + Math.random().toString(36).substring(2, 9);
+            const invNum = 'INV-' + Math.floor(100000 + Math.random() * 900000);
+            await tx.insert(schema.invoices).values({
+              id: invId,
+              invoiceNumber: invNum,
+              type: 'Fee',
+              tenantId: tenantUser.id,
+              tenantEmail: normalizedEmail,
+              tenantName: body.name,
+              unitId: unit.id,
+              propertyId: unit.propertyId,
+              ownerId: callerId,
+              organizationId: orgId,
+              organizationName: orgName,
+              amount: Number(unit.moveInFees),
+              description: 'Move-in Fees',
+              status: 'unpaid',
+              dueDate: invoiceDueDate,
+            });
+          }
+          if (Number(unit.recurringFees) > 0) {
+            const invId = 'inv-' + Math.random().toString(36).substring(2, 9);
+            const invNum = 'INV-' + Math.floor(100000 + Math.random() * 900000);
+            await tx.insert(schema.invoices).values({
+              id: invId,
+              invoiceNumber: invNum,
+              type: 'Fee',
+              tenantId: tenantUser.id,
+              tenantEmail: normalizedEmail,
+              tenantName: body.name,
+              unitId: unit.id,
+              propertyId: unit.propertyId,
+              ownerId: callerId,
+              organizationId: orgId,
+              organizationName: orgName,
+              amount: Number(unit.recurringFees),
+              description: 'First Month Recurring Fees',
+              status: 'unpaid',
+              dueDate: invoiceDueDate,
+            });
+          }
+        }
+
+        // 6. Audit Log
+        await tx.insert(schema.auditLogs).values({
+          id: 'audit-' + Math.random().toString(36).substring(2, 9),
+          ownerId: callerId,
+          actorName: req.user.name || 'Owner',
+          actorEmail: req.user.email,
+          actorInitials: (req.user.name || 'OW').split(' ').map((n: string) => n[0]).join('').toUpperCase(),
+          categoryIconName: 'UserCheck',
+          categoryLabel: 'Tenants',
+          description: `Directly added tenant "${body.name}" and assigned to Unit ${unit.label}.`,
+          severity: 'info',
+          status: 'success',
+          ip: req.ip || 'Unknown',
+          location: 'Unknown',
+        });
+
+        return {
+          success: true,
+          message: `Successfully added and assigned tenant ${body.name} to Unit ${unit.label}.`,
+        };
+      });
+    } catch (err: any) {
+      if (err instanceof BadRequestException) throw err;
+      throw new InternalServerErrorException(`Failed to add tenant: ${err.message}`);
     }
   }
 }

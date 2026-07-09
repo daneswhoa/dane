@@ -1,381 +1,407 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import ModLayout from '../../components/ModLayout';
+import ContractorStats from './ContractorStats';
+import ContractorManagerModal from './ContractorManagerModal';
 import { 
-  HardHat, Search, Filter, Download, MoreVertical, ShieldCheck, 
-  ShieldAlert, Shield, Star, MapPin, Mail, Phone, Calendar, 
-  FileText, CheckCircle, XCircle, AlertTriangle, ChevronRight
+  Search, RefreshCw, ChevronLeft, ChevronRight, ShieldCheck, Shield, Settings, Star, Loader2
 } from 'lucide-react';
 
-// --- MOCK DATA ---
-const CONTRACTORS = [
-  {
-    id: 'con-01',
-    name: 'Robert Miller',
-    company: 'Miller Plumbing Services',
-    email: 'robert@millerplumbing.com',
-    phone: '+31 6 12345678',
-    specialty: 'Plumbing',
-    status: 'verified', // verified, pending, banned
-    rating: 4.8,
-    jobsCompleted: 142,
-    location: 'Amsterdam, NL',
-    joined: '2023-04-12',
-    avatar: 'https://i.pravatar.cc/150?u=rob',
-  },
-  {
-    id: 'con-02',
-    name: 'Sarah Jenkins',
-    company: 'Spark Electrical Masters',
-    email: 'sarah@sparkelectrical.com',
-    phone: '+31 6 87654321',
-    specialty: 'Electrical',
-    status: 'pending',
-    rating: 0,
-    jobsCompleted: 0,
-    location: 'Rotterdam, NL',
-    joined: '2024-01-05',
-    avatar: 'https://i.pravatar.cc/150?u=sarah',
-  },
-  {
-    id: 'con-03',
-    name: 'Michael Chen',
-    company: 'Chen General Repairs',
-    email: 'mike@chenrepairs.com',
-    phone: '+31 6 11223344',
-    specialty: 'General Maintenance',
-    status: 'verified',
-    rating: 4.5,
-    jobsCompleted: 89,
-    location: 'Utrecht, NL',
-    joined: '2023-08-22',
-    avatar: 'https://i.pravatar.cc/150?u=mike',
-  },
-  {
-    id: 'con-04',
-    name: 'David De Boer',
-    company: 'De Boer HVAC',
-    email: 'david@deboerhvac.nl',
-    phone: '+31 6 99887766',
-    specialty: 'HVAC',
-    status: 'banned',
-    rating: 2.1,
-    jobsCompleted: 14,
-    location: 'The Hague, NL',
-    joined: '2023-11-10',
-    avatar: 'https://i.pravatar.cc/150?u=david',
-  },
-  {
-    id: 'con-05',
-    name: 'Emma Visser',
-    company: 'Visser Cleaning Experts',
-    email: 'emma@vissercleaning.nl',
-    phone: '+31 6 55443322',
-    specialty: 'Cleaning',
-    status: 'verified',
-    rating: 4.9,
-    jobsCompleted: 310,
-    location: 'Amsterdam, NL',
-    joined: '2022-09-15',
-    avatar: 'https://i.pravatar.cc/150?u=emma',
-  },
-];
+interface ContractorListItem {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  role: string;
+  joined: string;
+  lastActive: string | null;
+  specialty: string | null;
+  company: string | null;
+  rating: number;
+  completedJobs: number;
+  activeJobs: number;
+}
 
-export default function ContractorsManagementPage() {
+export default function ContractorsPage() {
+  const [contractors, setContractors] = useState<ContractorListItem[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [selectedContractor, setSelectedContractor] = useState<typeof CONTRACTORS[0] | null>(null);
+  const [appliedSearch, setAppliedSearch] = useState('');
+  const [filterSpecialty, setFilterSpecialty] = useState('All');
+  const [filterStatus, setFilterStatus] = useState('All');
+  const [isLoading, setIsLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 8;
 
-  const filteredData = CONTRACTORS.filter(c => {
-    const matchesSearch = c.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          c.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          c.email.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || c.status === statusFilter;
-    return matchesSearch && matchesStatus;
+  const [selectedContractor, setSelectedContractor] = useState<any | null>(null);
+  const [isDetailLoading, setIsDetailLoading] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const [stats, setStats] = useState({
+    totalContractors: 0,
+    activeCount: 0,
+    suspendedCount: 0,
+    activeDispatches: 0
   });
 
-  const getStatusBadge = (status: string) => {
-    switch(status) {
-      case 'verified':
-        return (
-          <div className="flex items-center gap-1 px-2.5 py-1 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-full border border-emerald-100 dark:border-emerald-500/20 text-[10px] font-bold uppercase tracking-wider">
-            <ShieldCheck className="w-3 h-3" /> Verified
-          </div>
-        );
-      case 'pending':
-        return (
-          <div className="flex items-center gap-1 px-2.5 py-1 bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-full border border-amber-100 dark:border-amber-500/20 text-[10px] font-bold uppercase tracking-wider">
-            <ShieldAlert className="w-3 h-3" /> Pending Review
-          </div>
-        );
-      case 'banned':
-        return (
-          <div className="flex items-center gap-1 px-2.5 py-1 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 rounded-full border border-red-100 dark:border-red-500/20 text-[10px] font-bold uppercase tracking-wider">
-            <Shield className="w-3 h-3" /> Suspended
-          </div>
-        );
-      default:
-        return null;
+  const triggerToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  const fetchContractors = async () => {
+    setIsLoading(true);
+    try {
+      const params = new URLSearchParams();
+      params.append('page', currentPage.toString());
+      params.append('limit', itemsPerPage.toString());
+      params.append('specialty', filterSpecialty);
+      params.append('status', filterStatus);
+      if (appliedSearch.trim()) {
+        params.append('search', appliedSearch.trim());
+      }
+
+      const res = await fetch(`/api/dashboard/security/contractors?${params.toString()}`);
+      if (res.ok) {
+        const data = await res.json();
+        setContractors(data.contractors || []);
+        setTotalCount(data.total || 0);
+        if (data.stats) {
+          setStats(data.stats);
+        }
+      } else {
+        triggerToast('Failed to fetch platform contractors');
+      }
+    } catch (e) {
+      console.error(e);
+      triggerToast('Error connecting to user API');
+    } finally {
+      setIsLoading(false);
     }
   };
 
+  useEffect(() => {
+    fetchContractors();
+  }, [currentPage, filterSpecialty, filterStatus, appliedSearch]);
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setCurrentPage(1);
+    setAppliedSearch(searchQuery);
+  };
+
+  const handleRefresh = () => {
+    setSearchQuery('');
+    setAppliedSearch('');
+    setFilterSpecialty('All');
+    setFilterStatus('All');
+    setCurrentPage(1);
+    fetchContractors();
+    triggerToast('Contractors list refreshed');
+  };
+
+  const handleOpenManage = async (c: ContractorListItem) => {
+    setIsDetailLoading(true);
+    try {
+      const res = await fetch(`/api/dashboard/security/contractors/${c.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        const initials = data.user.name.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase() || 'C';
+        const avatar = data.user.image || `https://placehold.co/100x100/1e2129/ffffff?text=${initials}`;
+
+        const activeTickets = data.activeTickets.map((t: any) => ({
+          id: t.id,
+          title: t.title || t.description || 'Maintenance dispatch request',
+          date: t.createdAt ? new Date(t.createdAt).toLocaleDateString() : 'N/A',
+          status: t.status === 'open' ? 'Assigned' : 'In Progress',
+          priority: t.urgency || 'Medium'
+        }));
+
+        const jobHistory = data.jobHistory.map((t: any) => ({
+          id: t.id,
+          title: t.title || t.description || 'Completed repair task',
+          date: t.createdAt ? new Date(t.createdAt).toLocaleDateString() : 'N/A',
+          status: 'Completed',
+          cost: t.amount ? Number(t.amount) : 0
+        }));
+
+        setSelectedContractor({
+          id: data.user.id,
+          name: data.user.name,
+          email: data.user.email,
+          phone: data.user.phone || 'No Phone Number',
+          specialty: data.contractor?.specialty || 'General Maintenance',
+          company: data.contractor?.bio || 'Independent Contractor',
+          rating: c.rating ? Number(c.rating) : 4.8,
+          completedJobs: jobHistory.length,
+          joined: new Date(data.user.createdAt).toLocaleDateString(),
+          verification: data.user.role === 'suspended_contractor' ? 'Suspended' : 'Verified',
+          avatar,
+          activeTickets,
+          jobHistory
+        });
+      } else {
+        triggerToast('Failed to load contractor details');
+      }
+    } catch (e) {
+      console.error(e);
+      triggerToast('Error loading contractor details');
+    } finally {
+      setIsDetailLoading(false);
+    }
+  };
+
+  const handleRestrictContractor = async (contractorId: string, message: string) => {
+    try {
+      const res = await fetch(`/api/dashboard/security/contractors/${contractorId}/suspend`, {
+        method: 'POST'
+      });
+      if (res.ok) {
+        triggerToast(`Contractor suspended successfully`);
+        setSelectedContractor(null);
+        fetchContractors();
+      } else {
+        triggerToast('Failed to suspend contractor');
+      }
+    } catch (e) {
+      console.error(e);
+      triggerToast('Error restricting contractor');
+    }
+  };
+
+  const handleDeleteContractor = async (contractorId: string) => {
+    try {
+      const res = await fetch(`/api/dashboard/security/contractors/${contractorId}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        triggerToast(`Contractor profile deleted`);
+        setSelectedContractor(null);
+        fetchContractors();
+      } else {
+        triggerToast('Failed to delete contractor');
+      }
+    } catch (e) {
+      console.error(e);
+      triggerToast('Error deleting contractor profile');
+    }
+  };
+
+  const specialties = ['Electrical', 'Plumbing', 'HVAC', 'General Repair', 'Roofing', 'Painting'];
+  const totalPages = Math.max(1, Math.ceil(totalCount / itemsPerPage));
+
   return (
-    <ModLayout>
-      <div className="flex flex-col lg:flex-row gap-6 h-full min-h-[calc(100vh-8rem)]">
+    <ModLayout title="Users / Contractors">
+      <div className="space-y-6 w-full pb-10 relative">
         
-        {/* Main List Column */}
-        <div className={`flex-1 flex flex-col space-y-6 transition-all duration-300 ${selectedContractor ? 'lg:w-2/3 lg:flex-none' : 'w-full'}`}>
-          
-          {/* Header & Controls */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-ink-900 p-5 rounded-2xl border border-paper-200 dark:border-ink-800 shadow-sm">
-            <div>
-              <h1 className="text-xl font-bold text-paper-900 dark:text-white flex items-center gap-2">
-                <HardHat className="w-6 h-6 text-indigo-500" /> Contractor Network
-              </h1>
-              <p className="text-xs text-paper-500 dark:text-ink-400 mt-1">Manage, verify, and monitor service providers across the platform.</p>
-            </div>
-            
-            <div className="flex items-center gap-3">
-              <button className="px-3 py-2 bg-paper-100 hover:bg-paper-200 dark:bg-ink-800 dark:hover:bg-ink-700 text-paper-700 dark:text-ink-300 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-colors">
-                <Download className="w-3.5 h-3.5" /> Export CSV
-              </button>
+        {/* TOAST */}
+        {toastMessage && (
+          <div className="fixed bottom-5 right-5 z-50 bg-ink-950 border border-coral-500/30 text-coral-400 px-4 py-3 rounded-xl shadow-2xl backdrop-blur-md flex items-center gap-2 font-medium text-xs">
+            <ShieldCheck className="w-4 h-4 text-coral-500" />
+            <span>{toastMessage}</span>
+          </div>
+        )}
+
+        {/* LOADING INDICATOR */}
+        {isDetailLoading && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 dark:bg-black/60 backdrop-blur-sm">
+            <div className="bg-white dark:bg-ink-900 border border-paper-200 dark:border-ink-800 rounded-2xl p-5 shadow-2xl flex items-center gap-3">
+              <Loader2 className="w-6 h-6 animate-spin text-coral-500 animate-pulse-slow" />
+              <span className="text-xs font-bold text-paper-800 dark:text-white">Retrieving contractor dispatch file...</span>
             </div>
           </div>
+        )}
 
-          {/* Filters Bar */}
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="relative flex-1">
+        {/* STATS PANEL */}
+        <ContractorStats 
+          totalContractors={stats.totalContractors}
+          activeCount={stats.activeCount}
+          suspendedCount={stats.suspendedCount}
+          activeDispatches={stats.activeDispatches}
+        />
+
+        {/* TOOLBAR */}
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 bg-white dark:bg-ink-900 p-4 rounded-2xl border border-paper-200 dark:border-ink-800 shadow-sm trans-theme w-full">
+          <form onSubmit={handleSearchSubmit} className="flex flex-col sm:flex-row flex-1 gap-3">
+            {/* Search */}
+            <div className="relative sm:w-72">
               <Search className="absolute left-3 top-2.5 w-4 h-4 text-paper-400 dark:text-ink-500" />
               <input 
                 type="text" 
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search contractors by name, company, or email..."
-                className="w-full pl-9 pr-4 py-2 bg-white dark:bg-ink-900 border border-paper-200 dark:border-ink-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 dark:text-white shadow-sm"
+                placeholder="Search contractor, firm, specialty... (Enter)" 
+                className="w-full pl-9 pr-4 py-2 bg-paper-50 dark:bg-ink-950 border border-paper-200 dark:border-ink-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-coral-500 dark:text-white shadow-inner trans-theme"
               />
             </div>
-            
-            <div className="flex items-center gap-2 bg-white dark:bg-ink-900 border border-paper-200 dark:border-ink-800 rounded-xl p-1 shadow-sm">
-              <button 
-                onClick={() => setStatusFilter('all')}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${statusFilter === 'all' ? 'bg-indigo-50 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400' : 'text-paper-500 hover:bg-paper-50 dark:hover:bg-ink-800'}`}
-              >
-                All
-              </button>
-              <button 
-                onClick={() => setStatusFilter('verified')}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${statusFilter === 'verified' ? 'bg-emerald-50 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400' : 'text-paper-500 hover:bg-paper-50 dark:hover:bg-ink-800'}`}
-              >
-                Verified
-              </button>
-              <button 
-                onClick={() => setStatusFilter('pending')}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${statusFilter === 'pending' ? 'bg-amber-50 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400' : 'text-paper-500 hover:bg-paper-50 dark:hover:bg-ink-800'}`}
-              >
-                Pending
-              </button>
-              <button 
-                onClick={() => setStatusFilter('banned')}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${statusFilter === 'banned' ? 'bg-red-50 dark:bg-red-500/20 text-red-600 dark:text-red-400' : 'text-paper-500 hover:bg-paper-50 dark:hover:bg-ink-800'}`}
-              >
-                Suspended
-              </button>
-            </div>
-          </div>
 
-          {/* Table */}
-          <div className="bg-white dark:bg-ink-900 border border-paper-200 dark:border-ink-800 rounded-2xl shadow-sm overflow-hidden flex-1 flex flex-col">
-            <div className="overflow-x-auto flex-1">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-paper-50/50 dark:bg-ink-950/50 border-b border-paper-200 dark:border-ink-800 text-[10px] font-black uppercase tracking-wider text-paper-500 dark:text-ink-400">
-                    <th className="px-5 py-4">Contractor Info</th>
-                    <th className="px-5 py-4">Specialty & Rating</th>
-                    <th className="px-5 py-4">Status</th>
-                    <th className="px-5 py-4 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-paper-100 dark:divide-ink-800/60">
-                  {filteredData.map(contractor => (
-                    <tr 
-                      key={contractor.id} 
-                      onClick={() => setSelectedContractor(contractor)}
-                      className={`group hover:bg-indigo-50/30 dark:hover:bg-indigo-500/5 cursor-pointer transition-colors ${selectedContractor?.id === contractor.id ? 'bg-indigo-50/50 dark:bg-indigo-500/10' : ''}`}
-                    >
-                      <td className="px-5 py-4">
-                        <div className="flex items-center gap-3">
-                          <img src={contractor.avatar} alt={contractor.name} className="w-10 h-10 rounded-full border border-paper-200 dark:border-ink-700 object-cover" />
-                          <div>
-                            <div className="text-sm font-bold text-paper-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-                              {contractor.name}
-                            </div>
-                            <div className="text-[11px] text-paper-500 dark:text-ink-400 font-medium">
-                              {contractor.company}
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-5 py-4">
-                        <div className="text-xs font-semibold text-paper-800 dark:text-ink-200">{contractor.specialty}</div>
-                        <div className="flex items-center gap-1 mt-1">
-                          <Star className={`w-3.h h-3.5 ${contractor.rating > 0 ? 'text-amber-400 fill-amber-400' : 'text-paper-300 dark:text-ink-600'}`} />
-                          <span className="text-[10px] font-bold text-paper-600 dark:text-ink-400">
-                            {contractor.rating > 0 ? contractor.rating.toFixed(1) : 'No Ratings'}
-                          </span>
-                          <span className="text-[9px] text-paper-400 mx-1">•</span>
-                          <span className="text-[10px] text-paper-500 dark:text-ink-400">{contractor.jobsCompleted} Jobs</span>
-                        </div>
-                      </td>
-                      <td className="px-5 py-4">
-                        {getStatusBadge(contractor.status)}
-                      </td>
-                      <td className="px-5 py-4 text-right">
-                        <button className="p-1.5 rounded-lg text-paper-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-500/20 transition-colors">
-                          <ChevronRight className="w-5 h-5" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                  {filteredData.length === 0 && (
-                    <tr>
-                      <td colSpan={4} className="px-5 py-12 text-center text-paper-500 dark:text-ink-400 text-xs">
-                        No contractors found matching your filters.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+            {/* Specialty filter */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] uppercase font-bold text-paper-400 dark:text-ink-500 shrink-0">Specialty:</span>
+              <select 
+                value={filterSpecialty}
+                onChange={(e) => {
+                  setFilterSpecialty(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="bg-paper-50 dark:bg-ink-950 border border-paper-200 dark:border-ink-800 rounded-lg px-2.5 py-1.5 text-xs text-paper-700 dark:text-ink-200 outline-none trans-theme font-semibold cursor-pointer"
+              >
+                <option value="All">All Specialties</option>
+                {specialties.map(spec => (
+                  <option key={spec} value={spec}>{spec}</option>
+                ))}
+              </select>
             </div>
-            <div className="px-5 py-3 border-t border-paper-200 dark:border-ink-800 bg-paper-50/50 dark:bg-ink-950/50 text-[10px] text-paper-500 dark:text-ink-400 flex justify-between items-center">
-              <span>Showing {filteredData.length} of {CONTRACTORS.length} records</span>
+
+            {/* Platform Status Filter */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] uppercase font-bold text-paper-400 dark:text-ink-500 shrink-0">Status:</span>
+              <select 
+                value={filterStatus}
+                onChange={(e) => {
+                  setFilterStatus(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="bg-paper-50 dark:bg-ink-950 border border-paper-200 dark:border-ink-800 rounded-lg px-2.5 py-1.5 text-xs text-paper-700 dark:text-ink-200 outline-none trans-theme font-semibold cursor-pointer"
+              >
+                <option value="All">All Statuses</option>
+                <option value="Active">Active Specialists</option>
+                <option value="Suspended">Suspended Specialists</option>
+              </select>
             </div>
+          </form>
+
+          <div className="flex items-center gap-2.5 self-end md:self-auto">
+            <button 
+              onClick={handleRefresh}
+              className="p-2 bg-paper-100 hover:bg-paper-200 dark:bg-ink-950 dark:hover:bg-ink-900 border border-paper-200 dark:border-ink-800 rounded-xl text-paper-700 dark:text-ink-200 trans-subtle flex items-center justify-center"
+              title="Refresh"
+            >
+              <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-coral-500' : ''}`} />
+            </button>
           </div>
         </div>
 
-        {/* Slide-over Profile Inspector (Only visible when selected) */}
-        {selectedContractor && (
-          <div className="w-full lg:w-96 bg-white dark:bg-ink-900 border border-paper-200 dark:border-ink-800 rounded-2xl shadow-xl flex flex-col overflow-hidden animate-slide-left flex-shrink-0 relative">
-            
-            {/* Header Cover */}
-            <div className="h-24 bg-gradient-to-r from-indigo-500 to-purple-600 relative flex-shrink-0">
-              <button 
-                onClick={() => setSelectedContractor(null)}
-                className="absolute top-4 right-4 p-1.5 bg-black/20 hover:bg-black/40 rounded-full text-white backdrop-blur-sm transition-colors"
-              >
-                <XCircle className="w-5 h-5" />
-              </button>
-            </div>
+        {/* TABLE */}
+        <div className="bg-white dark:bg-ink-900 border border-paper-200 dark:border-ink-800 rounded-2xl shadow-sm overflow-hidden flex flex-col w-full trans-theme">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse whitespace-nowrap">
+              <thead>
+                <tr className="bg-paper-50/50 dark:bg-ink-950/50 border-b border-paper-200 dark:border-ink-800 text-[10px] font-black uppercase tracking-wider text-paper-500 dark:text-ink-400 trans-theme">
+                  <th className="px-6 py-4">Contractor</th>
+                  <th className="px-6 py-4">Specialty & Firm</th>
+                  <th className="px-6 py-4">Active Jobs</th>
+                  <th className="px-6 py-4">Rating</th>
+                  <th className="px-6 py-4">Platform Status</th>
+                  <th className="px-6 py-4 text-right">Moderation</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-paper-100 dark:divide-ink-800/40 text-xs trans-theme">
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-12 text-center text-paper-400 dark:text-ink-650">
+                      <Loader2 className="w-5 h-5 animate-spin mx-auto text-coral-500 mb-2" />
+                      Loading contractors directory...
+                    </td>
+                  </tr>
+                ) : contractors.map((c) => {
+                  const initials = c.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() || 'C';
+                  const avatar = `https://placehold.co/100x100/1e2129/ffffff?text=${initials}`;
+                  const isSuspended = c.role === 'suspended_contractor';
 
-            {/* Profile Avatar & Title */}
-            <div className="px-6 pb-4 relative flex-shrink-0 border-b border-paper-100 dark:border-ink-800">
-              <img 
-                src={selectedContractor.avatar} 
-                alt={selectedContractor.name} 
-                className="w-20 h-20 rounded-full border-4 border-white dark:border-ink-900 object-cover absolute -top-10 shadow-md"
-              />
-              <div className="mt-12">
-                <div className="flex items-center justify-between mb-1">
-                  <h2 className="text-xl font-black text-paper-900 dark:text-white">{selectedContractor.name}</h2>
-                  {getStatusBadge(selectedContractor.status)}
-                </div>
-                <p className="text-sm font-semibold text-indigo-600 dark:text-indigo-400">{selectedContractor.company}</p>
-                <p className="text-xs text-paper-500 dark:text-ink-400 mt-0.5">{selectedContractor.specialty}</p>
-              </div>
-            </div>
-
-            {/* Details Scroll Area */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-hide">
-              
-              {/* Contact Info */}
-              <div className="space-y-3">
-                <h3 className="text-[10px] font-bold text-paper-400 dark:text-ink-500 uppercase tracking-wider">Contact Details</h3>
-                <div className="bg-paper-50 dark:bg-ink-950/50 rounded-xl p-3 border border-paper-100 dark:border-ink-800 space-y-2.5">
-                  <div className="flex items-center gap-3 text-xs text-paper-700 dark:text-ink-300">
-                    <Mail className="w-4 h-4 text-paper-400" /> {selectedContractor.email}
-                  </div>
-                  <div className="flex items-center gap-3 text-xs text-paper-700 dark:text-ink-300">
-                    <Phone className="w-4 h-4 text-paper-400" /> {selectedContractor.phone}
-                  </div>
-                  <div className="flex items-center gap-3 text-xs text-paper-700 dark:text-ink-300">
-                    <MapPin className="w-4 h-4 text-paper-400" /> {selectedContractor.location}
-                  </div>
-                </div>
-              </div>
-
-              {/* Stats */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-paper-50 dark:bg-ink-950/50 rounded-xl p-3 border border-paper-100 dark:border-ink-800 text-center">
-                  <p className="text-[10px] font-bold text-paper-400 dark:text-ink-500 uppercase">Jobs Completed</p>
-                  <p className="text-xl font-black text-paper-900 dark:text-white mt-1">{selectedContractor.jobsCompleted}</p>
-                </div>
-                <div className="bg-paper-50 dark:bg-ink-950/50 rounded-xl p-3 border border-paper-100 dark:border-ink-800 text-center">
-                  <p className="text-[10px] font-bold text-paper-400 dark:text-ink-500 uppercase">Avg Rating</p>
-                  <div className="flex items-center justify-center gap-1 mt-1">
-                    <span className="text-xl font-black text-paper-900 dark:text-white">{selectedContractor.rating > 0 ? selectedContractor.rating.toFixed(1) : 'N/A'}</span>
-                    <Star className={`w-4 h-4 ${selectedContractor.rating > 0 ? 'text-amber-400 fill-amber-400' : 'text-paper-300'}`} />
-                  </div>
-                </div>
-              </div>
-
-              {/* Documents Verification section */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-[10px] font-bold text-paper-400 dark:text-ink-500 uppercase tracking-wider">Verification Documents</h3>
-                  <span className="text-[9px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">3 Files</span>
-                </div>
-                <div className="space-y-2">
-                  {['Business License (KVK)', 'Liability Insurance', 'Identity Document'].map((doc, i) => (
-                    <div key={i} className="flex items-center justify-between p-2.5 border border-paper-200 dark:border-ink-800 rounded-lg hover:bg-paper-50 dark:hover:bg-ink-800/50 cursor-pointer transition-colors group">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded bg-indigo-50 dark:bg-indigo-500/10 text-indigo-500 flex items-center justify-center">
-                          <FileText className="w-4 h-4" />
+                  return (
+                    <tr 
+                      key={c.id} 
+                      className="group transition-colors hover:bg-paper-50/50 dark:hover:bg-ink-800/10"
+                    >
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <img src={avatar} alt={c.name} className="w-9 h-9 rounded-full border border-paper-200 dark:border-ink-800 object-cover" />
+                          <div>
+                            <div className="font-bold text-paper-900 dark:text-white group-hover:text-coral-500 trans-subtle leading-tight">{c.name}</div>
+                            <div className="text-[10px] text-paper-500 dark:text-ink-400 mt-0.5">{c.email}</div>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-xs font-semibold text-paper-800 dark:text-ink-200">{doc}</p>
-                          <p className="text-[9px] text-paper-400 mt-0.5">Uploaded {selectedContractor.joined}</p>
-                        </div>
-                      </div>
-                      <ChevronRight className="w-4 h-4 text-paper-300 group-hover:text-indigo-500" />
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="text-[10px] text-paper-400 dark:text-ink-600 flex items-center gap-1.5 pt-2 border-t border-paper-100 dark:border-ink-800">
-                <Calendar className="w-3.5 h-3.5" /> Registered on {selectedContractor.joined}
-              </div>
-
-            </div>
-
-            {/* Quick Actions Footer */}
-            <div className="p-4 bg-paper-50 dark:bg-ink-950/80 border-t border-paper-200 dark:border-ink-800 grid grid-cols-2 gap-2 flex-shrink-0">
-              {selectedContractor.status === 'pending' && (
-                <button className="col-span-2 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-2 shadow-sm">
-                  <CheckCircle className="w-4 h-4" /> Approve & Verify
-                </button>
-              )}
-              
-              <button className={`px-4 py-2.5 bg-white dark:bg-ink-900 border text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-2 shadow-sm ${
-                selectedContractor.status === 'banned' 
-                  ? 'border-emerald-200 text-emerald-600 hover:bg-emerald-50'
-                  : 'border-paper-200 dark:border-ink-700 text-paper-700 dark:text-ink-200 hover:bg-paper-50 dark:hover:bg-ink-800'
-              } ${selectedContractor.status !== 'pending' ? 'col-span-2' : ''}`}>
-                {selectedContractor.status === 'banned' ? (
-                  <><ShieldCheck className="w-4 h-4" /> Unban Contractor</>
-                ) : (
-                  <><ShieldAlert className="w-4 h-4" /> Update Status</>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="font-medium text-paper-800 dark:text-ink-100">{c.specialty || 'General Maintenance'}</div>
+                        <div className="text-[10px] text-paper-500 dark:text-ink-400 mt-0.5">{c.company || 'Independent'}</div>
+                      </td>
+                      <td className="px-6 py-4 font-mono font-bold text-paper-900 dark:text-white">
+                        {c.activeJobs} Jobs
+                      </td>
+                      <td className="px-6 py-4 font-medium text-paper-800 dark:text-ink-100 flex items-center gap-1">
+                        <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" /> {Number(c.rating).toFixed(1)}
+                      </td>
+                      <td className="px-6 py-4">
+                        {!isSuspended ? (
+                          <span className="flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                            <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" /> Active Specialist
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1 text-[10px] text-red-500 font-semibold">
+                            <Shield className="w-4 h-4 text-red-500 shrink-0" /> Suspended
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <button 
+                          onClick={() => handleOpenManage(c)}
+                          className="px-3 py-1.5 bg-paper-100 hover:bg-paper-200 dark:bg-ink-950 dark:hover:bg-ink-800 border border-paper-200 dark:border-ink-800 text-paper-700 dark:text-ink-200 rounded-lg text-xs font-bold transition-all shadow-sm flex items-center gap-1 ml-auto"
+                        >
+                          <Settings className="w-3.5 h-3.5 text-paper-400 group-hover:text-coral-500 transition-colors" />
+                          Manage
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {!isLoading && contractors.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-12 text-center text-paper-400 dark:text-ink-500 text-xs">
+                      No matching contractors found.
+                    </td>
+                  </tr>
                 )}
-              </button>
-
-              {selectedContractor.status !== 'banned' && (
-                <button className="col-span-2 mt-1 px-4 py-2 bg-red-50 dark:bg-red-500/10 hover:bg-red-100 dark:hover:bg-red-500/20 text-red-600 dark:text-red-400 text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-2">
-                  <AlertTriangle className="w-4 h-4" /> Suspend Account
-                </button>
-              )}
-            </div>
-
+              </tbody>
+            </table>
           </div>
+
+          {/* PAGINATION */}
+          {!isLoading && totalPages > 1 && (
+            <div className="px-6 py-4 border-t border-paper-200 dark:border-ink-800 bg-paper-50/50 dark:bg-ink-950/50 flex items-center justify-between text-[10px] text-paper-500 dark:text-ink-400 trans-theme">
+              <span>Showing {contractors.length} of {totalCount} specialists</span>
+              
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                  disabled={currentPage === 1 || totalPages <= 1}
+                  className="p-1.5 rounded bg-white hover:bg-paper-100 dark:bg-ink-900 dark:hover:bg-ink-800 border border-paper-200 dark:border-ink-800 disabled:opacity-30 disabled:cursor-not-allowed trans-subtle"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                </button>
+                <span className="font-mono font-bold px-2">Page {currentPage} of {totalPages || 1}</span>
+                <button 
+                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                  disabled={currentPage === totalPages || totalPages <= 1}
+                  className="p-1.5 rounded bg-white hover:bg-paper-100 dark:bg-ink-900 dark:hover:bg-ink-800 border border-paper-200 dark:border-ink-800 disabled:opacity-30 disabled:cursor-not-allowed trans-subtle"
+                >
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* MODAL */}
+        {selectedContractor && (
+          <ContractorManagerModal 
+            contractor={selectedContractor}
+            onClose={() => setSelectedContractor(null)}
+            onRestrict={handleRestrictContractor}
+            onDelete={handleDeleteContractor}
+          />
         )}
 
       </div>

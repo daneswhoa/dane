@@ -1,6 +1,6 @@
 import { eq, and, lte, ilike } from 'drizzle-orm';
 import * as schema from '../../db/schema';
-import { checkToolPermission } from './permissions';
+import { getToolPermissionError } from './permissions';
 
 export interface ManageContractorsArgs {
   action: 'browse' | 'bookmark';
@@ -24,11 +24,13 @@ export class ContractorMarketplaceTool {
 
     // Check permissions
     if (user) {
-      if (action === 'browse' && !checkToolPermission(user, 'Contractors', 'View Directory')) {
-        return { success: false, error: 'Access Denied: You do not have permission to view the contractor directory.' };
+      if (action === 'browse') {
+        const permError = getToolPermissionError(user, 'Contractors', 'View Directory');
+        if (permError) return { success: false, error: permError };
       }
-      if (action === 'bookmark' && !checkToolPermission(user, 'Contractors', 'Add Contractor')) {
-        return { success: false, error: 'Access Denied: You do not have permission to bookmark contractors.' };
+      if (action === 'bookmark') {
+        const permError = getToolPermissionError(user, 'Contractors', 'Add Contractor');
+        if (permError) return { success: false, error: permError };
       }
     }
 

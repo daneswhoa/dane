@@ -1,6 +1,6 @@
 import { eq, inArray } from 'drizzle-orm';
 import * as schema from '../../db/schema';
-import { checkToolPermission } from './permissions';
+import { getToolPermissionError } from './permissions';
 
 export interface UnitConfig {
   unitId?: string;
@@ -135,20 +135,22 @@ export class PropertySetupTool {
     const { db, userId, user } = context;
 
     // Check permissions
-    if (user && !checkToolPermission(user, 'Properties', 'View Properties')) {
-      return { success: false, error: 'Access Denied: You do not have permission to view properties.' };
+    if (user) {
+      const permError = getToolPermissionError(user, 'Properties', 'View Properties');
+      if (permError) return { success: false, error: permError };
     }
 
     try {
       const userExist = await db.select().from(schema.users).where(eq(schema.users.id, userId)).limit(1);
+      const orgId = userExist[0]?.organizationId || null;
       const orgName = userExist[0]?.organizationName || null;
 
       const props = await db
         .select()
         .from(schema.properties)
         .where(
-          orgName
-            ? eq(schema.properties.organizationName, orgName)
+          orgId
+            ? eq(schema.properties.organizationId, orgId)
             : eq(schema.properties.ownerId, userId)
         );
 
@@ -216,6 +218,7 @@ export class PropertySetupTool {
               arrears: u.arrears,
               floor: u.floor,
               unitType: u.unitType,
+              isListed: u.isListed,
             };
           }),
         });
@@ -244,8 +247,9 @@ export class PropertySetupTool {
     const { db, userId, user } = context;
 
     // Check permissions
-    if (user && !checkToolPermission(user, 'Properties', 'Edit')) {
-      return { success: false, error: 'Access Denied: You do not have permission to edit property setup.' };
+    if (user) {
+      const permError = getToolPermissionError(user, 'Properties', 'Edit');
+      if (permError) return { success: false, error: permError };
     }
 
     const { propertyId, name, address, photoUrl, unitsCount, settings, status, units: unitConfigs, namingConvention } = args;
@@ -263,9 +267,10 @@ export class PropertySetupTool {
 
       const property = propList[0];
       const userExist = await db.select().from(schema.users).where(eq(schema.users.id, userId)).limit(1);
+      const orgId = userExist[0]?.organizationId || null;
       const orgName = userExist[0]?.organizationName || null;
 
-      if (property.ownerId !== userId && (!orgName || property.organizationName !== orgName)) {
+      if (property.ownerId !== userId && (!orgId || property.organizationId !== orgId)) {
         return { success: false, error: 'Access denied. You do not have permissions to configure this property.' };
       }
 
@@ -366,8 +371,6 @@ export class PropertySetupTool {
         }
 
       } else if (finalUnitsCount > 1) {
-        const generatedList = generateUnitsFromConvention(finalUnitsCount, namingConvention);
-
         // Delete excess units if needed
         const currentCount = existingUnits.length;
         if (currentCount > finalUnitsCount) {
@@ -388,21 +391,39 @@ export class PropertySetupTool {
           .from(schema.units)
           .where(eq(schema.units.propertyId, propertyId));
 
+        const generatedList = namingConvention 
+          ? generateUnitsFromConvention(finalUnitsCount, namingConvention)
+          : [];
+
         for (let i = 0; i < finalUnitsCount; i++) {
-          const gen = generatedList[i];
           const targetUnit = refreshedUnits[i];
+          const gen = generatedList[i] || null;
 
           // Check for explicit configs override
           const explicitConfig = unitConfigs?.find(uc => 
             (uc.unitId && targetUnit && uc.unitId === targetUnit.id) || 
-            (uc.label && uc.label.toLowerCase() === gen.label.toLowerCase())
-          ) || unitConfigs?.[i];
+            (uc.label && targetUnit && uc.label.toLowerCase() === targetUnit.label.toLowerCase())
+          );
 
-          const labelVal = explicitConfig?.label || gen.label;
-          const floorVal = explicitConfig?.floor || gen.floor || '1st Floor';
-          const typeVal = explicitConfig?.unitType || 'Apartment';
-          const rentVal = explicitConfig?.rent !== undefined ? Number(explicitConfig.rent) : (targetUnit ? Number(targetUnit.rent) : 0);
-          const depositVal = explicitConfig?.deposit !== undefined ? Number(explicitConfig.deposit) : (targetUnit ? Number(targetUnit.deposit) : 0);
+          const labelVal = explicitConfig?.label 
+            || (targetUnit ? targetUnit.label : null)
+            || (gen ? gen.label : `Apt ${i + 1}`);
+
+          const floorVal = explicitConfig?.floor 
+            || (targetUnit ? targetUnit.floor : null)
+            || (gen ? gen.floor : '1st Floor')
+            || '1st Floor';
+
+          const typeVal = explicitConfig?.unitType 
+            || (targetUnit ? targetUnit.unitType : 'Apartment');
+
+          const rentVal = explicitConfig?.rent !== undefined 
+            ? Number(explicitConfig.rent) 
+            : (targetUnit ? Number(targetUnit.rent) : 0);
+
+          const depositVal = explicitConfig?.deposit !== undefined 
+            ? Number(explicitConfig.deposit) 
+            : (targetUnit ? Number(targetUnit.deposit) : 0);
 
           let recurringFeeDetailsStr = targetUnit ? targetUnit.recurringFeeDetails : '[]';
           let totalRecurring = targetUnit ? Number(targetUnit.recurringFees) : 0;
@@ -478,6 +499,7 @@ export class PropertySetupTool {
       await db.insert(schema.auditLogs).values({
         id: 'audit-' + Math.random().toString(36).substring(2, 9),
         ownerId: userId,
+        organizationId: property.organizationId || null,
         organizationName: property.organizationName,
         actorName: 'Sophia AI',
         actorEmail: 'sophia@landlord.nl',

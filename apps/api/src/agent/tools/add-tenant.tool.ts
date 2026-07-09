@@ -1,6 +1,6 @@
 import { eq, and, or } from 'drizzle-orm';
 import * as schema from '../../db/schema';
-import { checkToolPermission } from './permissions';
+import { getToolPermissionError } from './permissions';
 
 export interface AddTenantArgs {
   propertyId: string;
@@ -21,14 +21,16 @@ export class AddTenantTool {
     const { db, userId, user } = context;
 
     // Check permissions
-    if (user && !checkToolPermission(user, 'Tenants', 'Add Tenant')) {
-      return { success: false, error: 'Access Denied: You do not have permission to add tenants.' };
+    if (user) {
+      const permError = getToolPermissionError(user, 'Tenants', 'Add Tenant');
+      if (permError) return { success: false, error: permError };
     }
 
     const { propertyId, unitIdOrLabel, tenantName, tenantEmail } = args;
 
     try {
       const userExist = await db.select().from(schema.users).where(eq(schema.users.id, userId)).limit(1);
+      const orgId = userExist[0]?.organizationId || null;
       const orgName = userExist[0]?.organizationName || null;
 
       // Find property
@@ -114,6 +116,7 @@ export class AddTenantTool {
           unitId: unit.id,
           propertyId,
           ownerId: userId,
+          organizationId: orgId || property.organizationId,
           organizationName: orgName || property.organizationName,
           amount,
           amountPaid: 0,
@@ -148,6 +151,7 @@ export class AddTenantTool {
       await db.insert(schema.auditLogs).values({
         id: 'audit-' + Math.random().toString(36).substring(2, 9),
         ownerId: userId,
+        organizationId: orgId || property.organizationId,
         organizationName: orgName || property.organizationName,
         actorName: 'Sophia AI',
         actorEmail: 'sophia@landlord.nl',

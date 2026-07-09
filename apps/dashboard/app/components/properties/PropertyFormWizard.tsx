@@ -359,6 +359,7 @@ export default function PropertyFormWizard() {
       propertyName: formState.propertyName,
       propertyAddress: formState.propertyAddress,
       photoUrl: formState.uploadedImageUrl,
+      currency: formState.currency,
       units: formState.units.map((unit) => {
         const leaseStart = unit.moveInDate || new Date().toISOString().split('T')[0];
         const today = new Date();
@@ -421,7 +422,7 @@ export default function PropertyFormWizard() {
   };
 
   return (
-    <div className="min-h-screen bg-paper-50 dark:bg-ink-950 text-paper-900 dark:text-white pb-24 relative overflow-hidden transition-colors duration-200">
+    <div className="min-h-screen bg-paper-50 dark:bg-ink-955 text-paper-900 dark:text-white pb-24 relative overflow-hidden transition-colors duration-200 animate-fade-in" style={{ contentVisibility: 'auto' }}>
       {showRestoreModal && (
         <RestoreModal
           propertyName={formState.propertyName}
@@ -459,7 +460,7 @@ export default function PropertyFormWizard() {
               )}
 
               {formState.step === 1 && <StepClassification setupMode={formState.setupMode} onChangeMode={(m) => updateField('setupMode', m)} />}
-              {formState.step === 2 && <StepIdentity propertyName={formState.propertyName} propertyType={formState.propertyType} propertyRegion={formState.propertyRegion} onChangeField={updateField} errors={errors} limit={LIMITS.propertyName} />}
+              {formState.step === 2 && <StepIdentity propertyName={formState.propertyName} propertyType={formState.propertyType} propertyRegion={formState.propertyRegion} currency={formState.currency} onChangeField={updateField} errors={errors} limit={LIMITS.propertyName} />}
               {formState.step === 3 && <StepLocation propertyAddress={formState.propertyAddress} taxId={formState.taxId} constructionYear={formState.constructionYear} mapLatitude={formState.mapLatitude} mapLongitude={formState.mapLongitude} onChangeField={updateField} errors={errors} limit={LIMITS.propertyAddress} />}
               {formState.step === 4 && (
                 <StepUnitConfig
@@ -476,6 +477,7 @@ export default function PropertyFormWizard() {
                 <div>
                   <StepGridEditor
                     units={formState.units} setupMode={formState.setupMode}
+                    currency={formState.currency}
                     onAddManualUnit={() => {
                       const num = formState.units.length + 101;
                       updateField('units', [...formState.units, {

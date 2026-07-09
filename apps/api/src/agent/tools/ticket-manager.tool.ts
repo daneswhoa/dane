@@ -1,6 +1,6 @@
 import { eq, and, desc, inArray } from 'drizzle-orm';
 import * as schema from '../../db/schema';
-import { checkToolPermission } from './permissions';
+import { getToolPermissionError } from './permissions';
 
 export interface ManageTicketsArgs {
   action: 'fetch' | 'create' | 'update_status' | 'close_and_rate' | 'reject';
@@ -31,22 +31,22 @@ export class TicketManagerTool {
 
     // Check permissions if manager/landlord
     if (user && (user.role === 'manager' || user.role === 'landlord')) {
-      if (!checkToolPermission(user, 'Maintenance', 'View Tickets')) {
-        return { success: false, error: 'Access Denied: You do not have permission to view or manage maintenance tickets.' };
-      }
+      const permError = getToolPermissionError(user, 'Maintenance', 'View Tickets');
+      if (permError) return { success: false, error: permError };
     }
 
     const { action } = args;
 
     try {
       const userExist = await db.select().from(schema.users).where(eq(schema.users.id, userId)).limit(1);
+      const orgId = userExist[0]?.organizationId || null;
       const orgName = userExist[0]?.organizationName || null;
 
       if (action === 'fetch') {
         const conditions = [
-          orgName
-            ? eq(schema.tickets.organizationName, orgName)
-            : eq(schema.tickets.ownerId, userId)
+          orgId
+          ? eq(schema.tickets.organizationId, orgId)
+          : eq(schema.tickets.ownerId, userId)
         ];
         if (args.status) conditions.push(eq(schema.tickets.status, args.status));
         if (args.urgency) conditions.push(eq(schema.tickets.urgency, args.urgency));
@@ -161,6 +161,7 @@ export class TicketManagerTool {
         await db.insert(schema.tickets).values({
           id,
           ownerId: ownerId,
+          organizationId: orgId,
           organizationName: orgName,
           title: args.title || 'Maintenance Request',
           description: args.description,
@@ -176,6 +177,7 @@ export class TicketManagerTool {
         await db.insert(schema.auditLogs).values({
           id: 'audit-' + Math.random().toString(36).substring(2, 9),
           ownerId: ownerId,
+          organizationId: orgId,
           organizationName: orgName,
           actorName: 'Sophia AI',
           actorEmail: 'sophia@landlord.nl',
@@ -200,7 +202,7 @@ export class TicketManagerTool {
         if (tList.length === 0) return { success: false, error: 'Ticket not found.' };
         const ticket = tList[0];
 
-        if (ticket.organizationName !== orgName) {
+        if (ticket.organizationId !== orgId) {
           return { success: false, error: 'Access denied.' };
         }
 
@@ -219,7 +221,7 @@ export class TicketManagerTool {
 
         const tList = await db.select().from(schema.tickets).where(eq(schema.tickets.id, args.ticketId)).limit(1);
         if (tList.length === 0) return { success: false, error: 'Ticket not found.' };
-        if (tList[0].organizationName !== orgName) return { success: false, error: 'Access denied.' };
+        if (tList[0].organizationId !== orgId) return { success: false, error: 'Access denied.' };
 
         await db.update(schema.tickets).set({
           status: 'closed',
@@ -231,6 +233,7 @@ export class TicketManagerTool {
         await db.insert(schema.auditLogs).values({
           id: 'audit-' + Math.random().toString(36).substring(2, 9),
           ownerId: userId,
+          organizationId: orgId,
           organizationName: orgName,
           actorName: 'Sophia AI',
           actorEmail: 'sophia@landlord.nl',
@@ -256,7 +259,7 @@ export class TicketManagerTool {
         if (tList.length === 0) return { success: false, error: 'Ticket not found.' };
         const ticket = tList[0];
 
-        if (ticket.organizationName !== orgName) {
+        if (ticket.organizationId !== orgId) {
           return { success: false, error: 'Access denied.' };
         }
 
@@ -276,6 +279,7 @@ export class TicketManagerTool {
         await db.insert(schema.auditLogs).values({
           id: 'audit-' + Math.random().toString(36).substring(2, 9),
           ownerId: userId,
+          organizationId: orgId,
           organizationName: orgName,
           actorName: 'Sophia AI',
           actorEmail: 'sophia@landlord.nl',

@@ -8,6 +8,8 @@ import { ContractorMarketplaceTool } from './tools/contractor-marketplace.tool';
 import { DispatchEngineTool } from './tools/dispatch-engine.tool';
 import { GetTenantInvoicesTool } from './tools/get-tenant-invoices.tool';
 import { ManageInvoiceTool } from './tools/manage-invoice.tool';
+import { SyndicationTool } from './tools/syndication.tool';
+import { GetOrganizationInfoTool } from './tools/get-organization-info.tool';
 
 export interface ToolDefinition {
   name: string;
@@ -260,6 +262,47 @@ export const toolsRegistry: ToolDefinition[] = [
     },
     execute: (args: any, context: any) => {
       return ManageInvoiceTool.execute(args, context);
+    }
+  },
+  {
+    name: 'manageSyndication',
+    description: 'Manages unit syndications/listings. Allows fetching active listings, syndicating/listing vacant units, updating listing details (rent, deposit, county, subcounty, latitude, longitude, amenities, rules, photos/images), or unlisting individual units or entire properties.',
+    parameters: {
+      type: 'object',
+      properties: {
+        action: { type: 'string', enum: ['get_listings', 'list', 'update', 'unlist_unit', 'unlist_property'], description: 'The syndication action to perform.' },
+        propertyId: { type: 'string', description: 'Required for "list" and "unlist_property". ID of the property to syndicate or unlist.' },
+        unitIds: { type: 'array', items: { type: 'string' }, description: 'Required for "list". Array of unit IDs to list under the property.' },
+        unitId: { type: 'string', description: 'Required for "update" and "unlist_unit". ID of the specific unit to update or take down.' },
+        rent: { type: 'number', description: 'Optional: Rent amount for the listing.' },
+        deposit: { type: 'number', description: 'Optional: Security deposit for the listing.' },
+        moveInFees: { type: 'number', description: 'Optional: Move-in fees for the listing.' },
+        moveInFeeDetails: { type: 'string', description: 'Optional: Move-in fee description.' },
+        recurringFees: { type: 'number', description: 'Optional: Total stacked monthly recurring fees.' },
+        recurringFeeDetails: { type: 'string', description: 'Optional: Description details of recurring fees.' },
+        images: { type: 'array', items: { type: 'string' }, description: 'Optional: Array of image URLs for the listing.' },
+        county: { type: 'string', description: 'Optional: County location of the listing.' },
+        subcounty: { type: 'string', description: 'Optional: Subcounty location.' },
+        latitude: { type: 'number', description: 'Optional: Latitude coordinate.' },
+        longitude: { type: 'number', description: 'Optional: Longitude coordinate.' },
+        amenities: { type: 'array', items: { type: 'string' }, description: 'Optional: List of amenities (e.g. WiFi, Pool).' },
+        rules: { type: 'array', items: { type: 'string' }, description: 'Optional: List of property rules (e.g. No Pets).' }
+      },
+      required: ['action']
+    },
+    execute: (args: any, context: any) => {
+      return SyndicationTool.execute(args, context);
+    }
+  },
+  {
+    name: 'getOrganizationInfo',
+    description: 'Retrieves current organization metadata including name, date of creation, owner details, list of team members with their roles and permissions, and pending/unused invitations.',
+    parameters: {
+      type: 'object',
+      properties: {}
+    },
+    execute: (args: any, context: any) => {
+      return GetOrganizationInfoTool.execute(args, context);
     }
   }
 ];

@@ -70,11 +70,33 @@ export class AuthController {
       throw new BadRequestException('Email and role are required parameters.');
     }
     try {
+      // Resolve invite if it exists
+      const activeInvite = await db
+        .select()
+        .from(schema.invitations)
+        .where(
+          and(
+            eq(schema.invitations.email, body.email.toLowerCase().trim()),
+            eq(schema.invitations.used, false),
+            gt(schema.invitations.expiresAt, new Date())
+          )
+        )
+        .limit(1);
+
+      let orgId: string | null = null;
+      let orgName: string | null = body.organizationName || null;
+
+      if (activeInvite.length > 0) {
+        orgId = activeInvite[0].organizationId || null;
+        orgName = activeInvite[0].organizationName || null;
+      }
+
       await db
         .update(schema.users)
         .set({
           role: body.role,
-          organizationName: body.organizationName || null,
+          organizationId: orgId,
+          organizationName: orgName,
         })
         .where(eq(schema.users.email, body.email));
 

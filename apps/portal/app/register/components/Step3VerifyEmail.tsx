@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, MailCheck, Edit2, RotateCw } from 'lucide-react';
+import { ArrowLeft, MailCheck, Edit2, RotateCw, Loader2 } from 'lucide-react';
 
 interface Step3Props {
   email: string;
@@ -15,6 +15,7 @@ interface Step3Props {
   onContinue: () => void;
   onResend: (targetEmail?: string) => Promise<void>;
   activeClass: string;
+  isLoading?: boolean;
 }
 
 export default function Step3VerifyEmail({
@@ -28,7 +29,8 @@ export default function Step3VerifyEmail({
   onBack,
   onContinue,
   onResend,
-  activeClass
+  activeClass,
+  isLoading
 }: Step3Props) {
   const [resendCooldown, setResendCooldown] = useState(60);
   const [showModal, setShowModal] = useState(false);
@@ -142,10 +144,16 @@ export default function Step3VerifyEmail({
         </div>
 
         <div className="step-actions">
-          <button onClick={onContinue} className="step-btn-primary">
-            Verify Account
+          <button onClick={onContinue} disabled={isLoading} className="step-btn-primary">
+            {isLoading ? (
+              <span className="flex items-center justify-center gap-2">
+                <Loader2 size={16} className="spin-animation" style={{ display: 'inline' }} /> Verifying...
+              </span>
+            ) : (
+              'Verify Account'
+            )}
           </button>
-          <button onClick={onContinue} className="step-btn-ghost">
+          <button onClick={onContinue} disabled={isLoading} className="step-btn-ghost">
             I'll do this later
           </button>
         </div>

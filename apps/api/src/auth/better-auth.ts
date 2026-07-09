@@ -26,7 +26,7 @@ async function sendEmail({ to, subject, html }: { to: string; subject: string; h
   }
 
   // Use the user's domain in production, or fallback for verification
-  const fromEmail = 'landlord.hu <no-reply@danesproperties.com>';
+  const fromEmail = process.env.RESEND_FROM || 'landlord.hu <no-reply@mylandlordservices.com>';
 
   try {
     const res = await fetch('https://api.resend.com/emails', {
@@ -127,6 +127,10 @@ export const auth = betterAuth({
         type: 'string',
         required: false,
         defaultValue: 'tenant',
+      },
+      organizationId: {
+        type: 'string',
+        required: false,
       },
       organizationName: {
         type: 'string',

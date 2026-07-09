@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import {
   ArrowUp, MapPin, Home, Activity, SlidersHorizontal,
   LayoutGrid, List, Plus, AlertTriangle, ChevronDown,
-  ChevronLeft, ChevronRight, Database, ShieldAlert, ArrowRight
+  ChevronLeft, ChevronRight, Database, ShieldAlert, ArrowRight,
+  Sparkles, Check
 } from 'lucide-react';
 import { usePermissionsStore } from '../store/usePermissionsStore';
 import { useAuditStore } from '../store/useAuditStore';
@@ -97,6 +98,13 @@ export default function PropertiesTab() {
   const [deniedAction, setDeniedAction] = useState<string | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const itemsPerPage = 8;
+  
+  // Marketing & Vacancy Wizard States
+  const [showPromoModal, setShowPromoModal] = useState(false);
+  const [promoStep, setPromoStep] = useState(1);
+  const [showWizard, setShowWizard] = useState(false);
+  const [wizardVacancies, setWizardVacancies] = useState<Record<string, number>>({});
+  const [wizardSuccess, setWizardSuccess] = useState(false);
   
   const { checkPermission } = usePermissionsStore();
   const { logAction } = useAuditStore();
@@ -268,6 +276,32 @@ export default function PropertiesTab() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Direct Syndication Marketing Promo */}
+      <div className="bg-gradient-to-r from-coral-500/10 via-ink-900/40 to-coral-600/5 border border-coral-500/20 dark:border-coral-500/30 rounded-xl p-4 md:p-5 flex flex-col md:flex-row items-center justify-between gap-4 shadow-sm relative overflow-hidden transition-all hover:border-coral-500/40">
+        <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-radial-gradient from-coral-500/5 to-transparent pointer-events-none"></div>
+        <div className="flex items-start gap-3.5 z-10">
+          <div className="w-10 h-10 rounded-lg bg-coral-500/20 text-coral-500 flex items-center justify-center shrink-0 border border-coral-500/30">
+            <Sparkles className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="font-bold text-sm text-paper-900 dark:text-white">Active Syndication Pipeline</h3>
+              <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-coral-500 text-white tracking-wide uppercase">New Option</span>
+            </div>
+            <p className="text-xs text-paper-500 dark:text-ink-300 mt-1 leading-relaxed max-w-2xl">
+              You are currently managing <strong className="font-semibold text-paper-900 dark:text-white">{propertiesList.length} properties</strong>. 
+              Increase your reach and keep lease agreements occupied by syndicating vacant units directly to the resident search website in real-time.
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={() => { setShowPromoModal(true); setPromoStep(1); }}
+          className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-coral-500 hover:bg-coral-600 active:scale-95 text-white rounded-lg shadow-md shadow-coral-500/20 transition-all whitespace-nowrap z-10"
+        >
+          Market Vacancies <ArrowRight className="w-3.5 h-3.5" />
+        </button>
       </div>
 
       {/* Toolbar: Filters & Search */}
@@ -593,6 +627,287 @@ export default function PropertiesTab() {
             >
               <ChevronRight className="w-4 h-4" />
             </button>
+          </div>
+        </div>
+      )}
+
+            {showPromoModal && (
+        <div className="fixed inset-0 z-[100] w-screen h-screen flex flex-col justify-between bg-zinc-950/98 backdrop-blur-xl animate-fade-in text-white overflow-y-auto">
+          
+          {/* Top navigation */}
+          <div className="flex items-center justify-between px-8 py-6 border-b border-white/10">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-coral-500 animate-pulse"></span>
+              <span className="text-xs uppercase font-extrabold tracking-widest text-zinc-400">Zero-Vacancy Syndication Portal</span>
+            </div>
+            <button 
+              onClick={() => setShowPromoModal(false)}
+              className="text-zinc-400 hover:text-white transition-colors text-sm font-semibold flex items-center gap-1.5"
+            >
+              ✕ Close Presentation
+            </button>
+          </div>
+
+          {/* Core Body Container */}
+          <div className="flex-1 flex flex-col lg:flex-row items-center justify-center max-w-7xl mx-auto w-full px-8 py-12 gap-12">
+            
+            {/* Left Column: Graphic Showcase with reflection and hover card */}
+            <div className="w-full lg:w-1/2 flex flex-col items-center justify-center relative">
+              <div className="absolute -inset-4 rounded-3xl bg-coral-500/10 blur-3xl opacity-60"></div>
+              
+              {/* Graphic Display frame */}
+              <div className="relative group rounded-2xl overflow-hidden border border-white/15 bg-zinc-900/50 p-3 shadow-[0_20px_50px_rgba(0,0,0,0.5)] transition-transform duration-500 hover:scale-[1.02]">
+                <img 
+                  src={promoStep === 1 ? "/property_listing_promo_graphic.png" : "/property_features_step_graphic.png"} 
+                  alt="Feature Preview"
+                  className="rounded-xl max-h-[360px] object-cover border border-white/5"
+                />
+                
+                {/* floating badge */}
+                <div className="absolute bottom-6 left-6 right-6 bg-zinc-950/80 backdrop-blur-md border border-white/10 p-3.5 rounded-lg flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Interface status</p>
+                    <p className="text-xs font-semibold text-white mt-0.5">
+                      {promoStep === 1 ? "Live Syndicated View" : "Specification Editor"}
+                    </p>
+                  </div>
+                  <span className="text-[10px] font-bold text-coral-400 bg-coral-500/10 border border-coral-500/20 px-2.5 py-1 rounded">
+                    Active
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Right Column: Copy and Selling proposition */}
+            <div className="w-full lg:w-1/2 space-y-8 flex flex-col justify-center">
+              
+              {/* Slide indicators */}
+              <div className="flex gap-2">
+                <span className={`h-1.5 rounded-full transition-all duration-300 ${promoStep === 1 ? 'w-8 bg-coral-500' : 'w-2 bg-zinc-700'}`}></span>
+                <span className={`h-1.5 rounded-full transition-all duration-300 ${promoStep === 2 ? 'w-8 bg-coral-500' : 'w-2 bg-zinc-700'}`}></span>
+              </div>
+
+              {/* Title & Copy */}
+              {promoStep === 1 ? (
+                <div className="space-y-4">
+                  <span className="text-xs uppercase font-extrabold text-coral-500 tracking-wider">Syndication Pipeline</span>
+                  <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-white leading-tight">
+                    Keep your properties occupied. Let vacant units fill themselves.
+                  </h1>
+                  <p className="text-sm text-zinc-400 leading-relaxed max-w-lg">
+                    Automatically publish vacant apartments, cells, or buildings onto our high-traffic public resident list. Once a tenant vacates, local applicants are matched and invited to explore details.
+                  </p>
+                  
+                  <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/10">
+                    <div>
+                      <p className="text-2xl font-bold text-white">100%</p>
+                      <p className="text-[10px] text-zinc-500 uppercase font-semibold">Visibility rate</p>
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold text-white">Real-Time</p>
+                      <p className="text-[10px] text-zinc-500 uppercase font-semibold">Listing syndication</p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <span className="text-xs uppercase font-extrabold text-coral-500 tracking-wider">Spec Configuration</span>
+                  <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-white leading-tight">
+                    Enrich listings with location, photos & shared utilities.
+                  </h1>
+                  <p className="text-sm text-zinc-400 leading-relaxed max-w-lg">
+                    Upload visual portfolios, enter structural specs, and highlight included amenities such as high-speed internet, heating, or terrace access. Better lists attract high-quality residents.
+                  </p>
+
+                  <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/10">
+                    <div>
+                      <p className="text-2xl font-bold text-white">Flexible</p>
+                      <p className="text-[10px] text-zinc-500 uppercase font-semibold">Listing conditions</p>
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold text-white">Unlimited</p>
+                      <p className="text-[10px] text-zinc-500 uppercase font-semibold">Custom utility lists</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Actions Navigation buttons */}
+              <div className="flex items-center gap-4 pt-4">
+                {promoStep === 1 ? (
+                  <button
+                    onClick={() => setPromoStep(2)}
+                    className="flex items-center gap-2 px-6 py-3 bg-coral-500 hover:bg-coral-600 text-white font-bold text-sm rounded-lg shadow-lg shadow-coral-500/25 transition-all hover:translate-y-[-1px] active:translate-y-[1px]"
+                  >
+                    Continue to Specs <ArrowRight className="w-4 h-4" />
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => setPromoStep(1)}
+                      className="px-5 py-3 bg-zinc-900 border border-white/10 hover:bg-zinc-800 text-zinc-300 font-bold text-sm rounded-lg transition-all"
+                    >
+                      Back
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowPromoModal(false);
+                        router.push('/syndication');
+                      }}
+                      className="flex items-center gap-2 px-6 py-3 bg-coral-500 hover:bg-coral-600 text-white font-bold text-sm rounded-lg shadow-lg shadow-coral-500/25 transition-all hover:translate-y-[-1px] active:translate-y-[1px] animate-pulse"
+                    >
+                      Go to Syndication Center <Sparkles className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+              </div>
+
+            </div>
+          </div>
+
+          {/* Bottom Branding / Progress info footer */}
+          <div className="flex justify-between items-center px-8 py-4 border-t border-white/10 text-xs text-zinc-500">
+            <p>Dane Properties Management System © 2026</p>
+            <p>Step {promoStep} of 2</p>
+          </div>
+
+        </div>
+      )}
+
+      {showWizard && (
+        <div className="fixed inset-0 z-[100] w-screen h-screen flex items-center justify-center p-6 bg-zinc-950/98 backdrop-blur-xl animate-fade-in text-white">
+          <div className="bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl max-w-xl w-full overflow-hidden flex flex-col">
+            
+            {/* Header */}
+            <div className="bg-zinc-950 px-6 py-5 border-b border-white/10 flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-bold text-white">Syndicate Vacancies</h3>
+                <p className="text-xs text-zinc-400 mt-1">Select the number of vacant units for active syndication.</p>
+              </div>
+              <button 
+                onClick={() => setShowWizard(false)}
+                className="text-zinc-400 hover:text-white text-base font-semibold"
+              >
+                ✕ Close
+              </button>
+            </div>
+
+            {/* Success view vs List view */}
+            {wizardSuccess ? (
+              <div className="p-8 text-center space-y-6">
+                <div className="w-16 h-16 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 flex items-center justify-center mx-auto shadow-[0_0_15px_rgba(16,185,129,0.2)]">
+                  <Check className="w-8 h-8" />
+                </div>
+                <div className="space-y-2">
+                  <h4 className="text-lg font-bold text-white">Portfolios Active & Live!</h4>
+                  <p className="text-xs text-zinc-400 leading-relaxed max-w-sm mx-auto">
+                    Vacancies are syndicated. Prospective residents visiting our search channel can view listings, request showings, and submit lease inquiries.
+                  </p>
+                </div>
+                <div className="bg-zinc-950 p-3 rounded-lg border border-white/10 text-xs text-zinc-300 select-all font-mono break-all max-w-sm mx-auto">
+                  http://localhost:3001/tenant/vacancies
+                </div>
+                <button
+                  onClick={() => setShowWizard(false)}
+                  className="px-8 py-2.5 bg-coral-500 hover:bg-coral-600 text-white text-xs font-bold rounded-lg shadow transition-colors"
+                >
+                  Return to Dashboard
+                </button>
+              </div>
+            ) : (
+              <div className="p-6 flex-1 flex flex-col justify-between overflow-y-auto max-h-[420px] space-y-6">
+                <div className="space-y-4">
+                  {propertiesList.map(prop => {
+                    const maxUnits = prop.units || 1;
+                    const vacVal = wizardVacancies[prop.id] ?? 0;
+                    
+                    return (
+                      <div key={prop.id} className="flex items-center justify-between gap-4 p-3 bg-zinc-950/50 rounded-xl border border-white/5 hover:border-white/10 transition-colors">
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-white truncate">{prop.name}</p>
+                          <p className="text-[10px] text-zinc-500 mt-1">{maxUnits} Unit{maxUnits > 1 ? 's' : ''} total</p>
+                        </div>
+                        
+                        {/* Vacancy selector controls */}
+                        <div className="flex items-center gap-3">
+                          <button
+                            type="button"
+                            onClick={() => setWizardVacancies(prev => ({
+                              ...prev,
+                              [prop.id]: Math.max(0, (prev[prop.id] ?? 0) - 1)
+                            }))}
+                            className="w-7 h-7 rounded bg-zinc-800 hover:bg-zinc-700 text-white flex items-center justify-center font-bold text-xs transition-colors"
+                          >
+                            -
+                          </button>
+                          <span className="text-sm font-bold w-6 text-center text-white">
+                            {vacVal}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setWizardVacancies(prev => ({
+                              ...prev,
+                              [prop.id]: Math.min(maxUnits, (prev[prop.id] ?? 0) + 1)
+                            }))}
+                            className="w-7 h-7 rounded bg-zinc-800 hover:bg-zinc-700 text-white flex items-center justify-center font-bold text-xs transition-colors"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="border-t border-white/10 pt-4 flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowWizard(false)}
+                    className="px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-bold rounded-lg transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // Perform calculations and update local state
+                      const updated = propertiesList.map(p => {
+                        const vacantCount = wizardVacancies[p.id] ?? 0;
+                        const totalUnits = p.units || 1;
+                        const newOccupancyRate = Math.round(((totalUnits - vacantCount) / totalUnits) * 100);
+                        return {
+                          ...p,
+                          occupancy: `${newOccupancyRate}%`,
+                          badge: vacantCount > 0 ? 'Vacant' : undefined,
+                          badgeType: vacantCount > 0 ? 'neutral' : undefined,
+                          isVacant: vacantCount > 0,
+                        };
+                      });
+                      setPropertiesList(updated);
+                      localStorage.setItem('landlordnl_properties_list', JSON.stringify(updated));
+
+                      // Insert audit log
+                      logAction({
+                        actor: { 
+                          initials: userInitials, 
+                          name: user?.name || 'System User', 
+                          email: user?.email || 'user@landlord.nl' 
+                        },
+                        category: { icon: Database, label: 'Properties' },
+                        description: `Syndicated vacant units from portfolio to public listings page.`,
+                        ip: 'Unknown', location: 'Unknown', status: 'success', severity: 'info'
+                      });
+
+                      setWizardSuccess(true);
+                    }}
+                    className="flex-1 py-2.5 bg-coral-500 hover:bg-coral-600 text-white text-xs font-bold rounded-lg shadow-lg shadow-coral-500/25 transition-all flex items-center justify-center gap-1.5"
+                  >
+                    Publish to Website <Check className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+
           </div>
         </div>
       )}

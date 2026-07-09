@@ -121,6 +121,9 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
       fileData?: { base64Data: string; fileName: string };
       audioData?: { base64Data: string; mimeType: string };
       duration?: number;
+      source?: 'widget' | 'main';
+      currentTab?: string;
+      lastUIAction?: string;
     }
   ) {
     let userId = client.data.userId;
@@ -216,7 +219,10 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
         mappedHistory,
         data.fileData,
         data.audioData,
-        abortController.signal
+        abortController.signal,
+        data.source,
+        data.currentTab,
+        data.lastUIAction
       );
 
       let accumulatedResponse = '';

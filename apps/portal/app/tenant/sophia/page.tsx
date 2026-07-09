@@ -462,6 +462,8 @@ export default function TenantSophiaPage() {
         <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-thin">
           {messages.map((msg, idx) => {
             const isSophia = msg.sender === 'sophia';
+            const actionBlocks = msg.blocks?.filter(b => b.type === 'action') || [];
+            const isAnyPending = actionBlocks.some(b => b.actionStatus === 'pending');
             return (
               <div key={msg.id || idx} className={`flex ${isSophia ? 'justify-start' : 'justify-end'} animate-fade-in-up`}>
                 <div className={`flex gap-3 max-w-[85%] md:max-w-[70%] ${isSophia ? 'flex-row' : 'flex-row-reverse'}`}>
@@ -477,39 +479,32 @@ export default function TenantSophiaPage() {
                       <span className="text-[10px] font-bold text-paper-900 dark:text-white">{isSophia ? 'Sophia' : 'You'}</span>
                       <span className="text-[9px] text-paper-400 dark:text-ink-500">{msg.timestamp}</span>
                     </div>
-                    <div className={`px-4 py-3 rounded-2xl shadow-sm ${isSophia ? 'bg-white dark:bg-ink-800 text-paper-800 dark:text-ink-100 border border-paper-200 dark:border-ink-700 rounded-tl-sm' : 'bg-coral-500 text-white rounded-tr-sm'}`}>
+                    <div className={`px-4 py-3 rounded-2xl shadow-sm ${isSophia ? `bg-white dark:bg-ink-800 text-paper-800 dark:text-ink-100 border border-paper-200 dark:border-ink-700 rounded-tl-sm ${isAnyPending ? 'bubble-tool-active' : ''}` : 'bg-coral-500 text-white rounded-tr-sm'}`}>
                       {isSophia ? (
                         <div className="space-y-3">
                           {/* Tool Execution Badge */}
                           {msg.blocks && msg.blocks.some(b => b.type === 'action') && (
-                            (() => {
-                              const actionBlocks = msg.blocks.filter(b => b.type === 'action');
-                              const isAnyFailed = actionBlocks.some(b => b.actionStatus === 'failed');
-                              const isAnyPending = actionBlocks.some(b => b.actionStatus === 'pending');
-                              const isAllCompleted = actionBlocks.every(b => b.actionStatus === 'completed');
-
-                              let badgeColorClass = 'text-amber-600 dark:text-amber-450 bg-amber-500/5 border-amber-500/10';
-                              let statusIcon = <Wrench className="w-3 h-3 animate-pulse" />;
-                              let statusText = isAnyPending
-                                ? (actionBlocks.length > 1 ? `Checking with tools (${actionBlocks.length})...` : 'Checking with tool...')
-                                : (actionBlocks.length > 1 ? `Tools used (${actionBlocks.length})` : 'Tool used');
-
-                              if (isAnyFailed) {
-                                badgeColorClass = 'text-red-500 bg-red-500/5 border-red-500/15';
-                                statusIcon = <AlertTriangle className="w-3 h-3 text-red-500 animate-bounce" />;
-                                statusText = `Tool call failed!`;
-                              } else if (isAllCompleted) {
-                                badgeColorClass = 'text-emerald-600 dark:text-emerald-450 bg-emerald-500/5 border-emerald-500/10';
-                                statusIcon = <CheckCircle2 className="w-3 h-3 text-emerald-500" />;
-                              }
-
-                              return (
-                                <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[9px] font-bold font-mono tracking-wider shadow-sm uppercase ${badgeColorClass}`}>
-                                  {statusIcon}
-                                  <span>{statusText}</span>
-                                </div>
-                              );
-                            })()
+                            <div className="flex items-center gap-1.5 select-none" style={{ display: 'flex' }}>
+                              {actionBlocks.map((act, actIdx) => {
+                                const isPending = act.actionStatus === 'pending';
+                                const isFailed = act.actionStatus === 'failed';
+                                return (
+                                  <div
+                                    key={actIdx}
+                                    className={`inline-flex items-center justify-center p-1.5 rounded-lg border shadow-sm ${
+                                      isFailed
+                                        ? 'text-red-500 bg-red-500/5 border-red-500/20'
+                                        : isPending
+                                          ? 'text-coral-500 bg-coral-500/5 border-coral-500/25'
+                                          : 'text-emerald-500 bg-emerald-500/5 border-emerald-500/20'
+                                    }`}
+                                    title={act.actionName || 'Tool call'}
+                                  >
+                                    <Wrench className={`w-3.5 h-3.5 ${isPending ? 'animate-wrench-wiggle' : ''}`} />
+                                  </div>
+                                );
+                              })}
+                            </div>
                           )}
 
                           {msg.blocks && msg.blocks.length > 0 ? (

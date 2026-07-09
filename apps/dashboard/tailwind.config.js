@@ -12,6 +12,12 @@ export default {
       fontFamily: {
         sans: ['Inter', 'sans-serif'],
       },
+      borderColor: {
+        DEFAULT: 'var(--border-default)',
+        subtle: 'var(--border-subtle)',
+        strong: 'var(--border-strong)',
+        coral: 'var(--coral)',
+      },
       colors: {
         // Theme-aware colors pointing to Ink Coral Design System tokens
         base: 'var(--bg-base)',
@@ -87,6 +93,7 @@ export default {
           600: '#1e2129',
           700: '#16181f',
           800: '#101217',
+          850: '#0e0f13',
           900: '#0b0c0f',
           950: '#050608',
         }

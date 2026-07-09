@@ -1,6 +1,6 @@
 import { eq, and } from 'drizzle-orm';
 import * as schema from '../../db/schema';
-import { checkToolPermission } from './permissions';
+import { getToolPermissionError } from './permissions';
 
 export interface DispatchTicketArgs {
   action: 'assign' | 'request_quote' | 'approve_and_settle' | 'notify_tenant';
@@ -13,7 +13,7 @@ export interface DispatchTicketArgs {
   message?: string;
 }
 
-async function createContractorPayout(db: any, ticket: any, amount: number, userId: string, orgName: string | null) {
+async function createContractorPayout(db: any, ticket: any, amount: number, userId: string, orgId: string | null, orgName: string | null) {
   const invoiceId = 'inv-' + Math.random().toString(36).substring(2, 9);
   const invoiceNum = 'EXP-' + Math.floor(100000 + Math.random() * 900000);
   
@@ -64,6 +64,7 @@ async function createContractorPayout(db: any, ticket: any, amount: number, user
     unitId: ticket.unitId || null,
     propertyId: ticket.propertyId || null,
     ownerId: ticket.ownerId || userId,
+    organizationId: orgId,
     organizationName: orgName,
     amount: amount,
     description: `Settled billing for Maintenance Ticket #${ticket.id.toUpperCase()}: ${ticket.title || ticket.description}`,
@@ -87,23 +88,26 @@ export class DispatchEngineTool {
 
     // Check permissions
     if (user) {
-      if (['assign', 'request_quote', 'notify_tenant'].includes(action) && !checkToolPermission(user, 'Maintenance', 'Assign Contractor')) {
-        return { success: false, error: 'Access Denied: You do not have permission to assign contractors to maintenance tickets.' };
+      if (['assign', 'request_quote', 'notify_tenant'].includes(action)) {
+        const permError = getToolPermissionError(user, 'Maintenance', 'Assign Contractor');
+        if (permError) return { success: false, error: permError };
       }
-      if (action === 'approve_and_settle' && !checkToolPermission(user, 'Maintenance', 'Approve Invoices')) {
-        return { success: false, error: 'Access Denied: You do not have permission to approve/settle contractor invoices.' };
+      if (action === 'approve_and_settle') {
+        const permError = getToolPermissionError(user, 'Maintenance', 'Approve Invoices');
+        if (permError) return { success: false, error: permError };
       }
     }
 
     try {
       const userExist = await db.select().from(schema.users).where(eq(schema.users.id, userId)).limit(1);
+      const orgId = userExist[0]?.organizationId || null;
       const orgName = userExist[0]?.organizationName || null;
 
       const ticketList = await db.select().from(schema.tickets).where(eq(schema.tickets.id, ticketId)).limit(1);
       if (ticketList.length === 0) return { success: false, error: 'Ticket not found.' };
       const ticket = ticketList[0];
 
-      if (ticket.organizationName !== orgName) {
+      if (ticket.organizationId !== orgId) {
         return { success: false, error: 'Access denied.' };
       }
 
@@ -166,7 +170,7 @@ export class DispatchEngineTool {
             referenceId: ticketId,
           });
 
-          await createContractorPayout(db, ticket, amt, userId, orgName);
+          await createContractorPayout(db, ticket, amt, userId, orgId, orgName);
           finalMessage = `Paid contractor €${amt} immediately at company expense.`;
         } else if (args.settleAction === 'pay_and_bill_tenant' || args.settleAction === 'pay_and_charge_tenant') {
           if (!ticket.unitId) {
@@ -195,7 +199,7 @@ export class DispatchEngineTool {
             referenceId: ticketId,
           });
 
-          await createContractorPayout(db, ticket, amt, userId, orgName);
+          await createContractorPayout(db, ticket, amt, userId, orgId, orgName);
 
           // Generate invoice for tenant
           const invId = 'inv-' + Math.random().toString(36).substring(2, 9);
@@ -210,6 +214,7 @@ export class DispatchEngineTool {
             unitId: ticket.unitId,
             propertyId: ticket.propertyId,
             ownerId: userId,
+            organizationId: orgId,
             organizationName: orgName,
             amount: amt,
             description: `Recharge for Maintenance: ${ticket.title || ticket.description || 'Maintenance Work'}`,
@@ -237,6 +242,7 @@ export class DispatchEngineTool {
             unitId: ticket.unitId,
             propertyId: ticket.propertyId,
             ownerId: userId,
+            organizationId: orgId,
             organizationName: orgName,
             amount: amt,
             description: `Maintenance charge for ticket: ${ticket.title}`,
@@ -249,6 +255,7 @@ export class DispatchEngineTool {
         await db.insert(schema.auditLogs).values({
           id: 'audit-' + Math.random().toString(36).substring(2, 9),
           ownerId: userId,
+          organizationId: orgId,
           organizationName: orgName,
           actorName: 'Sophia AI',
           actorEmail: 'sophia@landlord.nl',

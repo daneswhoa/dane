@@ -31,6 +31,7 @@ export default function Topbar({ isDark, onToggleTheme, onActionClick }: TopbarP
       case 'payments': return 'Payments & Invoices';
       case 'maintenance': return 'Maintenance';
       case 'announcements': return 'Announcements';
+      case 'vacancies': return 'Available Properties';
       default: return 'Overview';
     }
   };

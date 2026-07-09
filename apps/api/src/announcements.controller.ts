@@ -25,12 +25,12 @@ export class AnnouncementsController {
     }
   ) {
     const ownerId = req.user.id;
-    const callerOrg = req.user.organizationName || '';
+    const callerOrgId = req.user.organizationId || '';
 
     // 1. Query matching tenants
     const conditions = [
       eq(schema.users.role, 'tenant'),
-      eq(schema.properties.organizationName, callerOrg)
+      eq(schema.properties.organizationId, callerOrgId)
     ];
 
     if (body.audienceType === 'property' && body.targetPropertyId) {
@@ -77,7 +77,8 @@ export class AnnouncementsController {
     await this.db.insert(schema.announcements).values({
       id: announcementId,
       ownerId,
-      organizationName: callerOrg || null,
+      organizationId: req.user.organizationId || null,
+      organizationName: req.user.organizationName || null,
       title: body.title,
       content: body.content,
       audienceType: body.audienceType,
@@ -101,7 +102,8 @@ export class AnnouncementsController {
     await this.db.insert(schema.auditLogs).values({
       id: 'audit-' + Math.random().toString(36).substring(2, 9),
       ownerId,
-      organizationName: callerOrg || null,
+      organizationId: req.user.organizationId || null,
+      organizationName: req.user.organizationName || null,
       actorName: req.user.name || 'Owner',
       actorEmail: req.user.email,
       actorInitials: (req.user.name || 'OW').split(' ').map((n: string) => n[0]).join('').toUpperCase(),
@@ -182,7 +184,7 @@ export class AnnouncementsController {
       return this.db
         .select()
         .from(schema.announcements)
-        .where(eq(schema.announcements.organizationName, req.user.organizationName || ''))
+        .where(eq(schema.announcements.organizationId, req.user.organizationId || ''))
         .orderBy(desc(schema.announcements.createdAt));
     }
   }

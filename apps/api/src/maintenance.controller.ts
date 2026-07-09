@@ -18,7 +18,7 @@ export class MaintenanceController {
     const db = this.db;
     const callerId = req.user.id;
     const callerRole = req.user.role;
-    const callerOrg = req.user.organizationName || '';
+    const callerOrgId = req.user.organizationId || '';
 
     try {
       let query = db
@@ -61,7 +61,7 @@ export class MaintenanceController {
         conditions.push(eq(schema.tickets.contractorId, callerId));
       } else {
         // Landlord/Manager
-        conditions.push(eq(schema.properties.organizationName, callerOrg));
+        conditions.push(eq(schema.properties.organizationId, callerOrgId));
       }
 
       if (tenantId) {
@@ -133,7 +133,7 @@ export class MaintenanceController {
       targetProperty = propList[0];
 
       // Managers/Teammates must belong to the same organization
-      if (callerRole !== 'tenant' && targetProperty.organizationName !== req.user.organizationName) {
+      if (callerRole !== 'tenant' && targetProperty.organizationId !== req.user.organizationId) {
         throw new BadRequestException('Access denied. You do not have permission to manage this property.');
       }
 
@@ -193,9 +193,11 @@ export class MaintenanceController {
         }
       }
 
-      // 3. Resolve organizationName and ownerId securely
+      // 3. Resolve organization details and ownerId securely
+      let orgId = req.user.organizationId || null;
       let orgName = req.user.organizationName || null;
-      if (targetProperty && targetProperty.organizationName) {
+      if (targetProperty && targetProperty.organizationId) {
+        orgId = targetProperty.organizationId;
         orgName = targetProperty.organizationName;
       }
 
@@ -204,8 +206,8 @@ export class MaintenanceController {
         if (targetProperty) {
           resolvedOwnerId = targetProperty.ownerId;
         }
-        if (!resolvedOwnerId && orgName) {
-          const orgOwner = await db.select().from(schema.users).where(and(eq(schema.users.organizationName, orgName), eq(schema.users.role, 'landlord'))).limit(1);
+        if (!resolvedOwnerId && orgId) {
+          const orgOwner = await db.select().from(schema.users).where(and(eq(schema.users.organizationId, orgId), eq(schema.users.role, 'landlord'))).limit(1);
           if (orgOwner.length > 0) {
             resolvedOwnerId = orgOwner[0].id;
           }
@@ -227,6 +229,7 @@ export class MaintenanceController {
         propertyId: body.propertyId || null,
         unitId: body.unitId || null,
         ownerId: resolvedOwnerId,
+        organizationId: orgId,
         organizationName: orgName || null,
         contractorId: body.contractorId || null,
         hourlyRate: body.hourlyRate || null,
@@ -256,6 +259,7 @@ export class MaintenanceController {
 
   @Post('maintenance/:id/assign')
   async assignContractor(
+    @Req() req: any,
     @Param('id') id: string,
     @Body() body: { contractorId: string; hourlyRate?: number; maxAuthorization?: number }
   ) {
@@ -264,6 +268,42 @@ export class MaintenanceController {
       throw new BadRequestException('contractorId is a required parameter.');
     }
     try {
+      // Premium check
+      const callerId = req.user.id;
+      let isPremium = false;
+      if (req.user.organizationId) {
+        const orgSubs = await db
+          .select()
+          .from(schema.subscriptions)
+          .innerJoin(schema.users, eq(schema.subscriptions.userId, schema.users.id))
+          .where(
+            and(
+              eq(schema.users.organizationId, req.user.organizationId),
+              eq(schema.subscriptions.tier, 'premium'),
+              eq(schema.subscriptions.status, 'active')
+            )
+          )
+          .limit(1);
+        isPremium = orgSubs.length > 0;
+      } else {
+        const userSubs = await db
+          .select()
+          .from(schema.subscriptions)
+          .where(
+            and(
+              eq(schema.subscriptions.userId, callerId),
+              eq(schema.subscriptions.tier, 'premium'),
+              eq(schema.subscriptions.status, 'active')
+            )
+          )
+          .limit(1);
+        isPremium = userSubs.length > 0;
+      }
+
+      if (!isPremium) {
+        throw new BadRequestException('Access Denied: Contractor assignment requires a Premium subscription ($2/mo). Please upgrade in the Organization Settings tab.');
+      }
+
       const tktList = await db.select().from(schema.tickets).where(eq(schema.tickets.id, id)).limit(1);
       if (tktList.length === 0) {
         throw new BadRequestException('Ticket not found.');
@@ -433,6 +473,7 @@ export class MaintenanceController {
             unitId: tkt.unitId || null,
             propertyId: tkt.propertyId || null,
             ownerId: tkt.ownerId,
+            organizationId: tkt.organizationId || null,
             organizationName: tkt.organizationName || null,
             amount: tkt.amount || body.amount,
             description: `Settled billing for Maintenance Ticket #${tkt.id.toUpperCase()}: ${tkt.title || tkt.description}`,

@@ -20,6 +20,7 @@ export class GetTenantInvoicesTool {
 
     try {
       const userExist = await db.select().from(schema.users).where(eq(schema.users.id, userId)).limit(1);
+      const orgId = userExist[0]?.organizationId || null;
       const orgName = userExist[0]?.organizationName || null;
 
       if (!args.tenantEmail && !args.tenantId && !args.unitId) {
@@ -27,8 +28,8 @@ export class GetTenantInvoicesTool {
       }
 
       let conditions: any[] = [
-        orgName
-          ? eq(schema.invoices.organizationName, orgName)
+        orgId
+          ? eq(schema.invoices.organizationId, orgId)
           : eq(schema.invoices.ownerId, userId)
       ];
 

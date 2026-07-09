@@ -9,37 +9,9 @@ export default {
     extend: {
       fontFamily: {
         sans: ['Inter', 'sans-serif'],
+        mono: ['JetBrains Mono', 'monospace'],
       },
       colors: {
-        base: 'var(--bg-base)',
-        panel: 'var(--bg-panel)',
-        raised: 'var(--bg-raised)',
-        
-        primary: 'var(--text-primary)',
-        secondary: 'var(--text-secondary)',
-        muted: 'var(--text-muted)',
-        
-        border: {
-          subtle: 'var(--border-subtle)',
-          DEFAULT: 'var(--border-default)',
-          strong: 'var(--border-strong)',
-        },
-        
-        coral: {
-          DEFAULT: 'var(--coral)',
-          hover: 'var(--coral-hover)',
-          muted: 'var(--coral-muted)',
-          text: 'var(--coral-text)',
-          50: '#fff0f0',
-          100: '#ffdede',
-          200: '#ffc2c2',
-          400: '#ff8787',
-          500: '#ff6b6b',
-          600: '#fa5252',
-          700: '#e03131',
-          900: '#8a1818',
-        },
-        
         paper: {
           50: '#fcfbf9',
           100: '#f3f1ec',
@@ -57,12 +29,51 @@ export default {
           400: '#343d50',
           500: '#272b36',
           600: '#1e2129',
+          650: '#1a1d24',
           700: '#16181f',
+          750: '#13151b',
           800: '#101217',
+          850: '#0d0f13',
           900: '#0b0c0f',
           950: '#050608',
+        },
+        coral: {
+          50: '#fff0f0',
+          100: '#ffdede',
+          200: '#ffc2c2',
+          500: '#ff6b6b',
+          600: '#fa5252',
+          700: '#e03131',
+          900: '#8a1818',
+        },
+        sophia: {
+          light: '#ffd6d6',
+          base: '#ff8f8f',
+          deep: '#cc4b4b',
+          glow: 'rgba(255, 107, 107, 0.4)'
         }
       },
+      animation: {
+        'gradient-x': 'gradient-x 3s ease infinite',
+        'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'float': 'float 3s ease-in-out infinite',
+      },
+      keyframes: {
+        'gradient-x': {
+          '0%, 100%': {
+            'background-size': '200% 200%',
+            'background-position': 'left center'
+          },
+          '50%': {
+            'background-size': '200% 200%',
+            'background-position': 'right center'
+          },
+        },
+        'float': {
+          '0%, 100%': { transform: 'translateY(0)' },
+          '50%': { transform: 'translateY(-5px)' },
+        }
+      }
     }
   },
   plugins: [],

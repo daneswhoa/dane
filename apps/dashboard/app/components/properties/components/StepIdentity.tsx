@@ -5,7 +5,8 @@ interface StepIdentityProps {
   propertyName: string;
   propertyType: string;
   propertyRegion: string;
-  onChangeField: (key: 'propertyName' | 'propertyType' | 'propertyRegion', value: string) => void;
+  currency: string;
+  onChangeField: (key: 'propertyName' | 'propertyType' | 'propertyRegion' | 'currency', value: string) => void;
   errors: Record<string, string>;
   limit: number;
 }
@@ -14,6 +15,7 @@ export function StepIdentity({
   propertyName,
   propertyType,
   propertyRegion,
+  currency,
   onChangeField,
   errors,
   limit,
@@ -80,6 +82,19 @@ export function StepIdentity({
               <option>Eastside</option>
             </select>
           </div>
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-semibold text-paper-700 dark:text-ink-200">Currency</label>
+          <select
+            value={currency}
+            onChange={(e) => onChangeField('currency', e.target.value)}
+            className="w-full px-3 py-2 text-xs border border-paper-200 dark:border-ink-700 rounded-lg bg-paper-50 dark:bg-ink-900 text-paper-900 dark:text-white focus:outline-none focus:border-coral-500 transition-colors"
+          >
+            <option value="USD">USD ($)</option>
+            <option value="EUR">Euro (€)</option>
+            <option value="KES">Kenyan Shilling (KES)</option>
+          </select>
         </div>
       </div>
     </div>

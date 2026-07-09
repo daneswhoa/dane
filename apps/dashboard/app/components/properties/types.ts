@@ -60,6 +60,7 @@ export interface WizardState {
   mapLongitude: string;
   unitTypes: string[];
   unitTypeConfigs: Record<string, UnitTypeConfig>;
+  currency: string;
 }
 
 export const initialWizardState: WizardState = {
@@ -84,4 +85,5 @@ export const initialWizardState: WizardState = {
   mapLongitude: '4.9041',
   unitTypes: ['Studio', '1 Bedroom', '2 Bedroom'],
   unitTypeConfigs: {},
+  currency: 'USD',
 };

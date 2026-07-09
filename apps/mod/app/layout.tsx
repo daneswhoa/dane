@@ -1,15 +1,9 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
 import './globals.css';
 
-const inter = Inter({
-  subsets: ['latin'],
-  variable: '--font-inter',
-});
-
 export const metadata: Metadata = {
-  title: 'Admin',
-  description: 'System administration',
+  title: 'Sophia AI | Admin Control Center',
+  description: 'Moderator and System Administration Workspace',
 };
 
 export default function RootLayout({
@@ -18,8 +12,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" data-theme="dark">
-      <body className={inter.variable}>
+    <html lang="en" className="dark scroll-smooth">
+      <body className="flex min-h-screen text-sm bg-paper-50 dark:bg-ink-900 text-paper-900 dark:text-ink-50 trans-theme overflow-hidden font-sans">
         {children}
       </body>
     </html>

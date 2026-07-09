@@ -74,6 +74,7 @@ export default function SophiaInputArea({
       const response = await fetch(`${apiBase}/api/dashboard/properties/upload`, {
         method: 'POST',
         body: formData,
+        credentials: 'include',
       });
 
       if (!response.ok) {

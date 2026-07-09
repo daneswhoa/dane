@@ -1,6 +1,6 @@
 import { eq, and, or } from 'drizzle-orm';
 import * as schema from '../../db/schema';
-import { checkToolPermission } from './permissions';
+import { getToolPermissionError } from './permissions';
 
 export interface AddInvoiceArgs {
   propertyId?: string;
@@ -24,14 +24,16 @@ export class AddInvoiceTool {
     const { db, userId, user } = context;
 
     // Check permissions
-    if (user && !checkToolPermission(user, 'Finance', 'Process Payments')) {
-      return { success: false, error: 'Access Denied: You do not have permission to issue invoices/payments.' };
+    if (user) {
+      const permError = getToolPermissionError(user, 'Finance', 'Process Payments');
+      if (permError) return { success: false, error: permError };
     }
 
     const { propertyId, unitIdOrLabel, tenantEmail, amount, description, dueDateStr, type = 'Fee' } = args;
 
     try {
       const userExist = await db.select().from(schema.users).where(eq(schema.users.id, userId)).limit(1);
+      const orgId = userExist[0]?.organizationId || null;
       const orgName = userExist[0]?.organizationName || null;
 
       let tenantUser = null;
@@ -102,6 +104,7 @@ export class AddInvoiceTool {
         unitId: targetUnit ? targetUnit.id : null,
         propertyId: targetProperty ? targetProperty.id : null,
         ownerId: userId,
+        organizationId: orgId,
         organizationName: orgName,
         amount,
         amountPaid: 0,
@@ -114,6 +117,7 @@ export class AddInvoiceTool {
       await db.insert(schema.auditLogs).values({
         id: 'audit-' + Math.random().toString(36).substring(2, 9),
         ownerId: userId,
+        organizationId: orgId,
         organizationName: orgName,
         actorName: 'Sophia AI',
         actorEmail: 'sophia@landlord.nl',

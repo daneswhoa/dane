@@ -7,7 +7,8 @@ import * as fs from 'fs';
 import { toolsRegistry, getOpenAITools, getGeminiTools } from './tool-registry';
 import { DATABASE_CONNECTION } from '../db/database.module';
 import * as schema from '../db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
+import { CreditLedgerService } from './credit-ledger.service';
 
 export interface AgentEvent {
   type: 'text' | 'status' | 'action_start' | 'action_end' | 'widget' | 'error';
@@ -24,6 +25,7 @@ export interface ChatMessage {
 
 @Injectable()
 export class AgentService {
+  private static isGeminiDisabled = false;
   private readonly logger = new Logger(AgentService.name);
   private readonly openai: OpenAI;
   private readonly googleGenAI: GoogleGenAI;
@@ -31,7 +33,8 @@ export class AgentService {
 
   constructor(
     private readonly configService: ConfigService,
-    @Inject(DATABASE_CONNECTION) private readonly db: any
+    @Inject(DATABASE_CONNECTION) private readonly db: any,
+    private readonly creditLedgerService: CreditLedgerService
   ) {
     // 1. Initialize OpenAI client for DeepSeek
     const deepseekApiKey = this.configService.get<string>('DEEPSEEK_API_KEY') || '';
@@ -90,8 +93,87 @@ export class AgentService {
     conversationHistory: { role: 'user' | 'assistant'; content: string }[],
     fileData?: { base64Data: string; fileName: string },
     audioData?: { base64Data: string; mimeType: string },
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    source?: 'widget' | 'main',
+    currentTab?: string,
+    lastUIAction?: string
   ): AsyncGenerator<AgentEvent> {
+    // Credit & Subscription Gating Check
+    if (userRole === 'manager' || userRole === 'landlord') {
+      let isPremium = false;
+      const userRec = await this.db.select().from(schema.users).where(eq(schema.users.id, userId)).limit(1);
+      const userObj = userRec[0] || null;
+      const userEmail = userObj?.email;
+
+      if (userObj?.organizationId) {
+        const orgSubs = await this.db
+          .select()
+          .from(schema.subscriptions)
+          .innerJoin(schema.users, eq(schema.subscriptions.userId, schema.users.id))
+          .where(
+            and(
+              eq(schema.users.organizationId, userObj.organizationId),
+              eq(schema.subscriptions.tier, 'premium'),
+              eq(schema.subscriptions.status, 'active')
+            )
+          )
+          .limit(1);
+        isPremium = orgSubs.length > 0;
+      } else {
+        const userSubs = await this.db
+          .select()
+          .from(schema.subscriptions)
+          .where(
+            and(
+              eq(schema.subscriptions.userId, userId),
+              eq(schema.subscriptions.tier, 'premium'),
+              eq(schema.subscriptions.status, 'active')
+            )
+          )
+          .limit(1);
+        isPremium = userSubs.length > 0;
+      }
+
+      if (!isPremium) {
+        yield { type: 'text', payload: '### Sophia AI - Access Blocked\nSophia is a Premium feature. Please upgrade to a Premium subscription ($2/mo) in the **Organization Settings** tab to unlock conversations with Sophia.' };
+        yield { type: 'status', payload: { status: 'idle', message: 'Ready' } };
+        return;
+      }
+
+      // Check credit balance
+      const chatConfig = await this.db
+        .select()
+        .from(schema.systemConfigs)
+        .where(eq(schema.systemConfigs.key, 'price_sophia_chat'))
+        .limit(1);
+      const basicChatCost = chatConfig.length > 0 ? Number(chatConfig[0].value) : 5;
+
+      if (userEmail) {
+        const balance = await this.creditLedgerService.resolveBalance(userEmail);
+        if (balance < basicChatCost) {
+          yield { type: 'text', payload: `### Sophia AI - Insufficient Credits\nYou have insufficient tokens to talk to Sophia. Balance: **${balance} tokens**, Cost: **${basicChatCost} tokens**. Please recharge your organization wallet in the **Organization Settings** tab.` };
+          yield { type: 'status', payload: { status: 'idle', message: 'Ready' } };
+          return;
+        }
+
+        // Deduct basic chat cost upfront
+        try {
+          await this.creditLedgerService.transferCredits(
+            userEmail,
+            'RESERVE_SPENT',
+            basicChatCost,
+            'spend',
+            'sophia_chat',
+            `Sophia AI basic query turn: "${userMessage.slice(0, 40)}..."`
+          );
+        } catch (err: any) {
+          yield { type: 'text', payload: `### Sophia AI - Ledger Error\nCould not process token deduction: ${err.message}` };
+          yield { type: 'status', payload: { status: 'idle', message: 'Ready' } };
+          return;
+        }
+      }
+    }
+
     let provider = this.selectProvider(userMessage, fileData, audioData, userRole);
     let currentGeminiModel = this.geminiModel;
     
@@ -121,6 +203,12 @@ export class AgentService {
 Your personality is helpful, warm, polite, and female. You speak directly to the property manager/user as a professional colleague.
 Always keep messages completely free of marketing fluff and industrial jargon (e.g. use simple labels like "Note", "Ticket", "Plumber", "Status", "Sending...").
 
+**CURRENT CHAT CONTEXT:**
+- **Client Interface:** ${source === 'widget' ? 'Floating Assistant Widget (Compact popup view)' : 'Main Workspace Tab (Full view)'}
+${source === 'widget' ? '- **COMPACT WIDGET RENDERING CONSTRAINT:** Because the user is chatting with you via a small floating widget window, you MUST NOT output wide markdown tables, lists of properties/invoices, charts, or detailed tool schemas. Keep responses brief, to-the-point, and focus on text. If they need to see complex information (like full portfolios or invoice lists), output a very brief summary and tell them to "Please open the main Sophia AI tab to view full tables/widgets."' : ''}
+- **Active Page/Tab User is Viewing:** ${currentTab || 'Overview'}
+- **Latest User UI Action:** ${lastUIAction || 'None'}
+
 **CRITICAL INSTRUCTION FOR TOOL USE:** You run in an agentic loop. If a tool call fails, returns an error, or doesn't find what you need, DO NOT immediately give up. Analyze the error, adjust your parameters, and autonomously retry the tool or try a different tool. You can execute tools multiple times in a single turn to solve complex problems.
 
 If you need to know which properties or units have not been set up yet, use the 'getPropertiesSetupStatus' tool.
@@ -139,15 +227,32 @@ To set up or edit a property or its units, use the 'setupOrUpdatePropertyAndUnit
 - Note that all of these options are optional. If they are not filled, the unit remains unsetup in the system, and you will be able to see that on subsequent status checks.
 - You can edit any of these details for a property or its units at any time.
 
+If the user wants to manage unit listings or syndication (such as syndicating/listing units, editing details of a listing, taking listing down, or checking listings), use the 'manageSyndication' tool:
+- To check if a unit is already syndicated/listed, inspect the 'isListed' flag in the units array returned by 'getPropertiesSetupStatus' (or check if the unit ID is present in the list returned by 'manageSyndication' with action='get_listings'). If 'isListed' is true (or if the unit is returned by 'get_listings'), it is already syndicated.
+- You can syndicate/list one unit or multiple units at a time.
+- **CRITICAL SYNDICATION REQUIREMENTS & CONSTRAINTS:**
+  1. When a user asks you to syndicate/list units, you **MUST** ask them for the **County** and **Subcounty** where the property is located. These are **required fields** for any listing.
+  2. You should also ask them if they want to specify any optional details: specifically **Amenities** and **Rules** for the units.
+  3. The user can upload/attach an image in the chat to be used for the listing. This single image will be applied to the **whole unit type** (meaning one image will be used to list all units of that unit type, e.g., one bedsitter photo for all bedsitter units). If an image is attached (denoted by a tag like '[Attached Image: http://...]'), pass the URL inside a JSON string array (e.g. '["http://..."]') to the 'images' argument of 'manageSyndication'.
+  4. Once you have successfully completed a syndication/listing, you **MUST** tell the user that it will be much easier to get the units occupied if they go to the **Syndication tab**, find the units, and list their exact location on a map.
+- **CRITICAL RULE ON UNIT TYPES:** You can only syndicate units of ONE unit type (e.g. only 'Bedsitter' or only 'Two-Bedroom') in a single tool call. If the user wants to syndicate multiple units of different types, you MUST execute the 'manageSyndication' tool multiple times (once for each unit type) in your agent reasoning loop, starting with one type first, and then listing the others.
+- To list/syndicate units, call with action='list'. This requires 'propertyId' and 'unitIds'. You can also pass location (county, subcounty, latitude, longitude), pricing (rent, deposit, recurringFees, moveInFees), images, amenities, and rules.
+- To update only specific parts of a listed unit, call with action='update'. This requires 'unitId' and you can pass only the keys you wish to adjust.
+- To take down or unlist a specific unit, call with action='unlist_unit' and pass 'unitId'.
+- To unlist an entire property (taking down all its units), call with action='unlist_property' and pass 'propertyId'.
+- Remember to confirm to the user once the listing has been created, modified, or taken down.
+
 If the user wants to create, upload, or add a property, use the 'createBarebonesProperty' tool.
 - First check if the name and type ('house' or 'apartment') are provided or can be inferred.
 - If not, ask the user for clarification (e.g., whether it has multiple units or is just a house/single unit, name, location, and photo/image).
-- If the user sends an image in their message, you will see a tag in the text format: \`[Attached Image: http://...]\`. Use the URL as the 'photoUrl' parameter when calling 'createBarebonesProperty'.
+- If the user sends an image in their message, you will see a tag in the text format: '[Attached Image: http://...]'. Use the URL as the 'photoUrl' parameter when calling 'createBarebonesProperty'.
 - If the user does not provide location/photo/units details but asks to go ahead, you can proceed by calling the tool with just the name and type. The system will automatically handle the fallback values (like generating a retro theme placeholder illustration for the property photo).
 - Always confirm to the user once the property has been successfully created.
 
 You have the ability to parse and visualize Excel spreadsheets. If the user provides a spreadsheet or asks to visualize spreadsheet data, invoke the 'parse_and_visualize_excel' tool.
 When a file is attached, you will be notified of its presence. Call 'parse_and_visualize_excel' to process the attachment. You do not need to guess or output the base64 data yourself; the system will automatically inject the file data during execution.
+
+If the user wants to check details about their team, workspace members, pending invites, or custom permissions, call the 'getOrganizationInfo' tool to load the metadata, creation date, owner email, roster of teammates, and their permission matrices.
 
 If the user sends you a voice/audio message, listen to it directly. It will be provided to you as audio data. Respond to the spoken instructions directly.`;
 
@@ -157,6 +262,28 @@ If the user sends you a voice/audio message, listen to it directly. It will be p
 - **Email:** ${user?.email || 'N/A'}
 - **Organization Name:** ${orgName}
 - **Role:** ${user?.role || 'manager'}
+
+**WORKSPACE DASHBOARD STRUCTURE:**
+You are embedded directly within the manager dashboard. If they ask where a feature is, or how to navigate the dashboard, guide them to one of the following tabs:
+- **Overview**: The main dashboard screen showing quick tasks and key metric cards.
+- **Sophia AI** (current tab): Where they can talk to you and see interactive widgets.
+- **Properties**: Set up and manage properties, units, rent details, and setup progress. Has a Building icon.
+- **Syndication**: Publish and syndicate active vacancies to external property listing sites. It has a Globe icon and is located in the sidebar under the "Core" section as the second item, situated between the "Properties" tab (which is above it, with a Building icon) and the "Tenants" tab (which is below it, with a Users/Group icon).
+- **Tenants**: Add, manage, and view tenant records, leases, and details. Has a Users icon.
+- **Finance** (Dropdown containing 3 sections):
+  - **Payments & Expenses**: View overall cash flow, log expenses, and see payments.
+  - **Invoices**: View, edit, filter, and add invoices/rent bills.
+  - **Wallet**: Check organization balances and manage bank payouts.
+- **Maintenance**: View, create, assign, and manage maintenance tickets.
+- **Contractors**: Browse local plumbers, electricians, or other pros in the marketplace.
+- **Communication** (Dropdown containing 4 sections):
+  - **Announcements**: Write and send public updates or notices to residents.
+  - **Email Broadcasts**: Create and send out email campaigns to tenant lists.
+  - **Automations**: Set up automatic message alerts (such as late rent reminders).
+  - **Templates**: Manage reusable text templates for communication.
+- **Analytics**: Performance charts and financial reports.
+- **Security & Audit**: Review system logs, activity history, and security rules.
+- **Organization / Team**: Manage team members, invite staff, and edit role permissions.
 `;
       if (user?.permissions) {
         try {
@@ -167,12 +294,14 @@ If the user sends you a voice/audio message, listen to it directly. It will be p
         teammateInfoPrompt += `- **Permissions Configuration:** Organization Owner (Full Access)\n`;
       }
       teammateInfoPrompt += `
-**SECURITY & ACCESS RULES:**
-If a tool execution fails with an error starting with "Access Denied", this is NOT a system hiccup, glitch, or bug. It means the user you are talking to does NOT have the required role-based permissions in ${orgName} to execute this action.
+**SECURITY, ACCESS & USER PERMISSIONS:**
+You inherit the permissions of the logged-in user you are speaking with. 
+If a tool execution fails with an error starting with "Access Denied", it means the LOGGED-IN USER does NOT have the required permission enabled on their account for this action.
 When this happens:
 1. Immediately STOP attempting to retry the tool or adjust arguments.
-2. Inform the user directly and politely that they do not have the required permissions under their current workspace configuration in ${orgName} to perform this action.
-3. Suggest that they request permission from the organization owner or administrator under the Organization settings tab.
+2. Tell the user directly, clearly, and politely that their account "${user?.name || 'User'}" (${user?.email || 'N/A'}) does not have this permission enabled in ${orgName}.
+3. Explain which specific permission and module is missing (e.g., "List New" under "Properties").
+4. Instruct them to ask their organization owner or administrator to enable this permission for them in the "Organization / Team" settings tab under Member Access control.
 `;
       systemPrompt += teammateInfoPrompt;
     }
@@ -226,7 +355,9 @@ If the user sends you a voice/audio message, listen to it directly and respond.$
     // Assemble messages list
     const messages: ChatMessage[] = [
       { role: 'system', content: systemPrompt },
-      ...conversationHistory.map(h => ({ role: h.role, content: h.content })),
+      ...conversationHistory
+        .filter(h => !h.content?.includes('CRITICAL SYSTEM NOTICE:'))
+        .map(h => ({ role: h.role, content: h.content })),
     ];
 
     // Append user message with optional attachment metadata
@@ -318,14 +449,14 @@ If the user sends you a voice/audio message, listen to it directly and respond.$
 
         if (provider === 'gemini') {
           this.logger.warn(`Gemini (${currentGeminiModel}) failed: ${err.message}`);
+          AgentService.isGeminiDisabled = true;
           provider = 'deepseek';
-          this.logger.warn(`Gemini completely failed. Falling back to DeepSeek.`);
-          yield { type: 'status', payload: { status: 'thinking', message: 'Gemini unavailable. Re-routing to DeepSeek...' } };
+          this.logger.warn(`Gemini completely failed. Setting isGeminiDisabled=true and falling back to DeepSeek.`);
+          yield { type: 'status', payload: { status: 'thinking', message: 'Gemini billing limit reached. Re-routing directly to DeepSeek...' } };
           
-          // Push a critical instruction to the message history so DeepSeek knows Gemini failed
           messages.push({
             role: 'system',
-            content: 'CRITICAL SYSTEM NOTICE: The primary Gemini engine failed to run (likely due to missing credentials, service account setup, or environment limitations). You are running as the backup assistant. Please politely inform the user that because the primary Gemini engine is currently unavailable, you are unable to run tools, parse spreadsheet attachments, or modify properties/units in the database. Tell them what happened, apologize, and offer to help with general questions instead.'
+            content: 'SYSTEM NOTICE: You are running as the active agent via DeepSeek because the primary Gemini API is unavailable (likely billing/quota issue). You have full access to call database tools normally. Help the user configure their properties, syndicate their units, or perform administrative tasks using your tools.'
           });
           continue;
         }
@@ -347,7 +478,7 @@ If the user sends you a voice/audio message, listen to it directly and respond.$
    * Route request to Gemini for excel/spreadsheet tasks and native audio, and DeepSeek for normal conversation
    */
   private selectProvider(userMessage: string, fileData?: any, audioData?: any, userRole?: string): 'gemini' | 'deepseek' {
-    if (userRole === 'tenant') {
+    if (userRole === 'tenant' || AgentService.isGeminiDisabled) {
       return 'deepseek';
     }
 
@@ -365,7 +496,8 @@ If the user sends you a voice/audio message, listen to it directly and respond.$
     const toolKeywords = [
       'excel', 'spreadsheet', 'sheet', 'csv', 'visualize', 'chart', 'graph', 'parse',
       'create', 'add', 'setup', 'update', 'edit', 'change', 'modify', 'new property',
-      'property', 'properties', 'unit', 'units', 'rent', 'deposit', 'fee', 'fees'
+      'property', 'properties', 'unit', 'units', 'rent', 'deposit', 'fee', 'fees',
+      'syndicate', 'syndication', 'listing', 'listings', 'unlist'
     ];
 
     const needsToolCall = toolKeywords.some(keyword => query.includes(keyword));
@@ -518,6 +650,66 @@ If the user sends you a voice/audio message, listen to it directly and respond.$
       yield { type: 'action_start', payload: { id: tc.id, name: toolName } };
  
       try {
+        // Enforce credit check surcharge for tool execution
+        if (userRole === 'manager' || userRole === 'landlord') {
+          const userRec = await this.db.select().from(schema.users).where(eq(schema.users.id, userId)).limit(1);
+          const userObj = userRec[0];
+          const userEmail = userObj?.email;
+          if (userEmail) {
+            if (toolName === 'parse_and_visualize_excel') {
+              const parseConfig = await this.db
+                .select()
+                .from(schema.systemConfigs)
+                .where(eq(schema.systemConfigs.key, 'price_excel_parse'))
+                .limit(1);
+              const chatConfig = await this.db
+                .select()
+                .from(schema.systemConfigs)
+                .where(eq(schema.systemConfigs.key, 'price_sophia_chat'))
+                .limit(1);
+              const parseCost = parseConfig.length > 0 ? Number(parseConfig[0].value) : 50;
+              const chatCost = chatConfig.length > 0 ? Number(chatConfig[0].value) : 5;
+              const surcharge = Math.max(0, parseCost - chatCost);
+              
+              if (surcharge > 0) {
+                await this.creditLedgerService.transferCredits(
+                  userEmail,
+                  'RESERVE_SPENT',
+                  surcharge,
+                  'spend',
+                  'sophia_chat',
+                  `Sophia AI Excel parser surcharge for file: ${fileData?.fileName || 'Spreadsheet'}`
+                );
+              }
+            } else {
+              const toolConfig = await this.db
+                .select()
+                .from(schema.systemConfigs)
+                .where(eq(schema.systemConfigs.key, 'price_sophia_tool'))
+                .limit(1);
+              const chatConfig = await this.db
+                .select()
+                .from(schema.systemConfigs)
+                .where(eq(schema.systemConfigs.key, 'price_sophia_chat'))
+                .limit(1);
+              const toolCost = toolConfig.length > 0 ? Number(toolConfig[0].value) : 15;
+              const chatCost = chatConfig.length > 0 ? Number(chatConfig[0].value) : 5;
+              const surcharge = Math.max(0, toolCost - chatCost);
+              
+              if (surcharge > 0) {
+                await this.creditLedgerService.transferCredits(
+                  userEmail,
+                  'RESERVE_SPENT',
+                  surcharge,
+                  'spend',
+                  'sophia_chat',
+                  `Sophia AI tool execution surcharge: ${toolName}`
+                );
+              }
+            }
+          }
+        }
+
         const args = JSON.parse(toolArgsStr);
  
         // Intercept and inject base64 data for Excel parsing if uploaded
@@ -598,6 +790,10 @@ If the user sends you a voice/audio message, listen to it directly and respond.$
           yield { type: 'widget', payload: { type: 'invoice-managed', data: { ...output, args } } };
         }
 
+        if (output.success && toolName === 'manageSyndication') {
+          yield { type: 'widget', payload: { type: 'syndication-managed', data: { ...output, args } } };
+        }
+
       } catch (err: any) {
         this.logger.error(`Error executing tool ${toolName}`, err);
         messages.push({
@@ -618,7 +814,7 @@ If the user sends you a voice/audio message, listen to it directly and respond.$
     messages: ChatMessage[],
     audioData?: { base64Data: string; mimeType: string }
   ): { contents: any[] } {
-    const rawTurns: { role: 'user' | 'model'; parts: any[] }[] = [];
+    const rawTurns: { role: 'user' | 'model' | 'tool'; parts: any[] }[] = [];
 
     // Find index of the very last user message in the list
     const lastUserIdx = messages.map((m, idx) => m.role === 'user' ? idx : -1).reduce((a, b) => Math.max(a, b), -1);

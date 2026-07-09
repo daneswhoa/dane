@@ -7,6 +7,7 @@ interface Property {
   id: string;
   name: string;
   address: string;
+  currency?: string;
 }
 
 interface EditPropertyModalProps {
@@ -18,6 +19,17 @@ interface EditPropertyModalProps {
 export function EditPropertyModal({ property, onClose, onSuccess }: EditPropertyModalProps) {
   const [name, setName] = useState(property.name);
   const [address, setAddress] = useState(property.address);
+  const [currency, setCurrency] = useState(property.currency || 'USD');
+
+  const getCurrencySymbol = (cur: string) => {
+    switch (cur.toUpperCase()) {
+      case 'KES': return 'KES ';
+      case 'EUR': return '€';
+      case 'USD': return '$';
+      default: return '$';
+    }
+  };
+  const symbol = getCurrencySymbol(currency);
   
   // Rent Adjustment fields
   const [adjustType, setAdjustType] = useState<'none' | 'percentage' | 'amount'>('none');
@@ -34,11 +46,11 @@ export function EditPropertyModal({ property, onClose, onSuccess }: EditProperty
 
     try {
       // 1. Update basic details
-      if (name !== property.name || address !== property.address) {
+      if (name !== property.name || address !== property.address || currency !== property.currency) {
         const updateRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/dashboard/properties/${property.id}/update`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, address }),
+          body: JSON.stringify({ name, address, currency }),
           credentials: 'include',
         });
         if (!updateRes.ok) {
@@ -132,6 +144,21 @@ export function EditPropertyModal({ property, onClose, onSuccess }: EditProperty
                 className="w-full mt-1 px-3 py-2 text-xs border border-paper-200 dark:border-ink-800 rounded-lg bg-white dark:bg-ink-950 text-paper-900 dark:text-white focus:outline-none focus:border-coral-500 focus:ring-1 focus:ring-coral-500 transition-colors"
               />
             </div>
+
+            <div>
+              <label className="text-[10px] uppercase font-bold text-paper-400 dark:text-ink-500 tracking-wider">
+                Currency
+              </label>
+              <select
+                value={currency}
+                onChange={(e) => setCurrency(e.target.value)}
+                className="w-full mt-1 px-3 py-2 text-xs border border-paper-200 dark:border-ink-800 rounded-lg bg-white dark:bg-ink-950 text-paper-900 dark:text-white focus:outline-none focus:border-coral-500 focus:ring-1 focus:ring-coral-500 transition-colors"
+              >
+                <option value="USD">USD ($)</option>
+                <option value="EUR">Euro (€)</option>
+                <option value="KES">Kenyan Shilling (KES)</option>
+              </select>
+            </div>
           </div>
 
           <hr className="border-paper-150 dark:border-ink-800" />
@@ -205,14 +232,16 @@ export function EditPropertyModal({ property, onClose, onSuccess }: EditProperty
             {adjustType === 'amount' && (
               <div className="space-y-1">
                 <span className="text-[10px] text-paper-400 dark:text-ink-500">
-                  Adjustment Dollar Value (e.g. 50 for +$50/mo, -25 for -$25/mo)
+                  Adjustment Currency Value (e.g. 50 for +{symbol}50/mo, -25 for -{symbol}25/mo)
                 </span>
                 <div className="relative">
-                  <DollarSign className="w-3.5 h-3.5 text-paper-400 dark:text-ink-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <div className="w-8 flex items-center justify-center text-paper-400 dark:text-ink-500 absolute left-0 top-1/2 -translate-y-1/2 text-xs font-semibold select-none">
+                    {symbol.trim()}
+                  </div>
                   <input
                     type="number"
                     step="1"
-                    placeholder="Enter flat dollar change..."
+                    placeholder={`Enter flat change...`}
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
                     className="w-full pl-8 pr-3 py-2 text-xs border border-paper-200 dark:border-ink-800 rounded-lg bg-white dark:bg-ink-950 text-paper-900 dark:text-white focus:outline-none focus:border-coral-500 focus:ring-1 focus:ring-coral-500 transition-colors"

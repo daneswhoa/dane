@@ -3,12 +3,14 @@ import { eq, desc, and, or, ilike, sql } from 'drizzle-orm';
 import * as schema from './db/schema';
 import { SessionGuard } from './auth/auth.guard';
 import { DATABASE_CONNECTION } from './db/database.module';
+import { UpstashRedisService } from './redis/redis.service';
 
 @Controller('dashboard/security')
 @UseGuards(SessionGuard)
 export class SecurityController {
   constructor(
-    @Inject(DATABASE_CONNECTION) private readonly db: any
+    @Inject(DATABASE_CONNECTION) private readonly db: any,
+    private readonly redisService: UpstashRedisService,
   ) {}
 
   @Get('audit-logs')
@@ -25,7 +27,13 @@ export class SecurityController {
     const offset = (page - 1) * limit;
 
     try {
-      let conditions: any[] = [eq(schema.auditLogs.organizationName, callerOrg)];
+      let conditions: any[] = [];
+
+      // Moderators and Admins see logs from all organizations.
+      // Other roles are restricted to their own organization logs.
+      if (req.user.role !== 'moderator' && req.user.role !== 'admin') {
+        conditions.push(eq(schema.auditLogs.organizationName, callerOrg));
+      }
 
       if (severity && severity !== 'All') {
         conditions.push(eq(schema.auditLogs.severity, severity));
@@ -121,5 +129,58 @@ export class SecurityController {
       console.error('Failed to save audit log to DB:', err.message);
       return { success: true, message: 'Saved to logs stream' };
     }
+  }
+
+  @Get('limits')
+  async getLimits() {
+    const redis = this.redisService.getClient();
+    let config: any = null;
+    if (redis) {
+      config = await redis.get('system:rate-limits');
+    }
+    const finalConfig = config || {
+      read: { limit: 100, ttl: 60 },
+      write: { limit: 30, ttl: 60 },
+      heavy: { limit: 5, ttl: 60 },
+      multipliers: { standard: 1.0, enterprise: 3.0, restricted: 0.1 }
+    };
+
+    // Get all landlords, managers, tenants, and contractors
+    const db = this.db;
+    const users = await db
+      .select({ id: schema.users.id, name: schema.users.name, email: schema.users.email, role: schema.users.role })
+      .from(schema.users)
+      .where(sql`${schema.users.role} IN ('landlord', 'manager', 'tenant', 'contractor')`);
+
+    const usersWithTiers: any[] = [];
+    for (const u of users) {
+      let tier = 'standard';
+      if (redis) {
+        tier = (await redis.get<string>(`system:user-tiers:${u.id}`)) || 'standard';
+      }
+      usersWithTiers.push({ ...u, tier });
+    }
+
+    return { config: finalConfig, users: usersWithTiers };
+  }
+
+  @Post('limits')
+  async saveLimits(@Body() body: any) {
+    const redis = this.redisService.getClient();
+    if (redis) {
+      await redis.set('system:rate-limits', body);
+      return { success: true };
+    }
+    return { success: false, message: 'Redis client unavailable.' };
+  }
+
+  @Post('limits/user-tier')
+  async saveUserTier(@Body() body: { userId: string; tier: string }) {
+    const redis = this.redisService.getClient();
+    if (redis) {
+      await redis.set(`system:user-tiers:${body.userId}`, body.tier);
+      return { success: true };
+    }
+    return { success: false, message: 'Redis client unavailable.' };
   }
 }
